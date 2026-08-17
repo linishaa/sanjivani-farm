@@ -27,7 +27,7 @@ function Login() {
   const [staffError, setStaffError] = useState('');
 
   // API BASE URL
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+  const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
 
   // 1. AUTO-LOGIN CHECK: Redirect if active session exists
   useEffect(() => {

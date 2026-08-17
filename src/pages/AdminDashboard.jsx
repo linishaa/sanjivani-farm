@@ -12,7 +12,7 @@ function AdminDashboard() {
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastStatus, setBroadcastStatus] = useState('');
 
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+  const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
 
   // --- AUTOMATIC USER SYNC ON COMPONENT MOUNT ---
   useEffect(() => {

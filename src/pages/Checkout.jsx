@@ -10,7 +10,7 @@ function Checkout() {
   const [address, setAddress] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE_URL = 'http://127.0.0.1:5000';
+  const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
 
   // Fallback to localStorage for currentUser session persistence
   const getStoredUser = () => {
