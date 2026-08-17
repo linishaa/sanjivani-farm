@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useProducts } from '../context/ProductContext';
 
+const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
+
 function AdminDashboard() {
   const { orders = [], subscriptions = [] } = useProducts() || {};
   const [activeTab, setActiveTab] = useState('transactions');
@@ -12,11 +14,6 @@ function AdminDashboard() {
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastStatus, setBroadcastStatus] = useState('');
 
- const response = await fetch('https://sanjivani-farmbackend.onrender.com/api/admin/login', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ username, password })
-});
   // --- AUTOMATIC USER SYNC ON COMPONENT MOUNT ---
   useEffect(() => {
     const syncLocalUsersToBackend = async () => {
