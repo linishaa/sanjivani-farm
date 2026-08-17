@@ -12,8 +12,11 @@ function AdminDashboard() {
   const [broadcastLoading, setBroadcastLoading] = useState(false);
   const [broadcastStatus, setBroadcastStatus] = useState('');
 
-  const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
-
+ const response = await fetch('https://sanjivani-farmbackend.onrender.com/api/admin/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ username, password })
+});
   // --- AUTOMATIC USER SYNC ON COMPONENT MOUNT ---
   useEffect(() => {
     const syncLocalUsersToBackend = async () => {
