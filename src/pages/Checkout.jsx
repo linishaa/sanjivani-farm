@@ -7,10 +7,20 @@ function Checkout() {
   const { cart = [], currentUser: contextUser } = useProducts() || {};
 
   const [paymentMethod, setPaymentMethod] = useState('online');
-  const [address, setAddress] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com';
+  // Structured Delivery Address State
+  const [street, setStreet] = useState('');
+  const [village, setVillage] = useState('');
+  const [district, setDistrict] = useState('');
+  const [stateName, setStateName] = useState('');
+  const [pincode, setPincode] = useState('');
+
+  // Dynamically switch between local Flask backend and Render URL
+  const API_BASE_URL =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://127.0.0.1:5000'
+      : 'https://sanjivani-farmbackend.onrender.com';
 
   // Fallback to localStorage for currentUser session persistence
   const getStoredUser = () => {
@@ -27,16 +37,16 @@ function Checkout() {
   // Guard: Redirect to login if user is not authenticated
   if (!currentUser) {
     return (
-      <div className="bg-[#FFF5F2] min-h-screen flex items-center justify-center p-4">
-        <div className="bg-white p-8 rounded-3xl border border-[#0F172A]/10 text-center max-w-md space-y-4 shadow-lg">
-          <span className="text-3xl">🔒</span>
-          <h2 className="text-2xl font-black text-[#0F172A]">Sign In Required</h2>
-          <p className="text-xs font-medium text-[#0F172A]/70">
-            You must verify your email via OTP before placing an order.
+      <div className="bg-[#f0fdf4] min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-3xl border border-emerald-900/10 text-center max-w-md space-y-4 shadow-xl">
+          <span className="text-4xl">🔒</span>
+          <h2 className="text-2xl font-black text-gray-900">Sign In Required</h2>
+          <p className="text-xs font-medium text-gray-600">
+            You must verify your account before placing an order.
           </p>
           <button
             onClick={() => navigate('/login')}
-            className="w-full py-3 bg-[#0F172A] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#1e293b]"
+            className="w-full py-3.5 bg-[#16a34a] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#15803d] transition-all shadow-md"
           >
             Go to Sign In
           </button>
@@ -45,7 +55,7 @@ function Checkout() {
     );
   }
 
-  const subtotal = cart.reduce((acc, item) => acc + (item.price * (item.quantity || 1)), 0);
+  const subtotal = cart.reduce((acc, item) => acc + item.price * (item.quantity || 1), 0);
 
   // Dynamically load Razorpay SDK Script
   const loadRazorpayScript = () => {
@@ -66,8 +76,13 @@ function Checkout() {
   const handlePlaceOrder = async (e) => {
     e.preventDefault();
 
-    if (!address.trim()) {
-      alert('Please enter a valid shipping address.');
+    if (!village.trim() || !district.trim() || !stateName.trim() || !pincode.trim()) {
+      alert('Please fill in all mandatory address details (Village/City, District, State, and Pincode).');
+      return;
+    }
+
+    if (pincode.trim().length !== 6 || isNaN(pincode)) {
+      alert('Please enter a valid 6-digit Pincode.');
       return;
     }
 
@@ -76,11 +91,13 @@ function Checkout() {
       return;
     }
 
+    const fullAddress = `${street ? street.trim() + ', ' : ''}${village.trim()}, District: ${district.trim()}, ${stateName.trim()} - ${pincode.trim()}`;
+
     setIsProcessing(true);
 
     // ------------------- OPTION A: CASH ON DELIVERY -------------------
     if (paymentMethod === 'cod') {
-      alert(`Order placed successfully via Cash on Delivery for ${currentUser.name || 'Customer'}!`);
+      alert(`Order placed successfully via Cash on Delivery for ${currentUser.name || 'Customer'}!\nShipping Address: ${fullAddress}`);
       setIsProcessing(false);
       navigate('/');
       return;
@@ -124,7 +141,7 @@ function Checkout() {
           contact: currentUser.phone || '',
         },
         theme: {
-          color: '#FF8B8B',
+          color: '#16a34a',
         },
         handler: async function (response) {
           // Step 3: Verify Payment on Backend
@@ -135,9 +152,9 @@ function Checkout() {
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
               razorpay_signature: response.razorpay_signature,
-              address: address,
+              address: fullAddress,
               cart: cart,
-              userEmail: currentUser.email
+              userEmail: currentUser.email || currentUser.phone,
             }),
           });
 
@@ -160,81 +177,173 @@ function Checkout() {
 
       const razorpayWindow = new window.Razorpay(options);
       razorpayWindow.open();
-
     } catch (error) {
       console.error('Razorpay Error:', error);
-      alert('Could not initiate online payment. Check if Flask backend is running.');
+      alert('Could not initiate online payment. Ensure Flask backend is running on http://127.0.0.1:5000');
       setIsProcessing(false);
     }
   };
 
   return (
-    <div className="bg-[#FFF5F2] min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white p-8 rounded-3xl border border-[#0F172A]/10 shadow-lg space-y-6">
-        <h1 className="text-2xl font-black text-[#0F172A]">Checkout</h1>
-        
-        <div className="bg-[#FFF8F5] p-4 rounded-2xl border border-[#0F172A]/5 text-xs text-[#0F172A]/80">
-          Ordering as: <span className="font-bold text-[#0F172A]">{currentUser.name || 'Customer'} ({currentUser.email || 'Email not provided'})</span>
+    <div className="bg-[#f0fdf4] min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto bg-white p-8 rounded-3xl border border-emerald-900/10 shadow-xl space-y-6">
+        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+          <h1 className="text-2xl font-black text-gray-900">Checkout</h1>
+          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+            Sanjivani Farm
+          </span>
+        </div>
+
+        <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/60 text-xs text-gray-700 flex items-center justify-between">
+          <div>
+            Ordering as: <span className="font-bold text-emerald-900">{currentUser.name || 'Customer'}</span>
+          </div>
+          <div className="text-emerald-700 font-semibold">{currentUser.email || currentUser.phone || ''}</div>
         </div>
 
         <form onSubmit={handlePlaceOrder} className="space-y-6">
-          {/* Address */}
-          <div>
-            <label className="block text-xs font-extrabold uppercase text-[#0F172A]/70 mb-2">Delivery Address</label>
-            <textarea 
-              required 
-              rows="3" 
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Enter complete shipping address"
-              className="w-full px-4 py-3 rounded-2xl border border-[#0F172A]/15 text-xs font-bold text-[#0F172A] focus:outline-none focus:ring-2 focus:ring-[#FF8B8B]"
-            />
+          {/* Structured Delivery Address Section */}
+          <div className="space-y-4">
+            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
+              Delivery Address Details
+            </h2>
+
+            <div>
+              <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                House No. / Street / Landmark (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. House No. 12, Main Road, Near Milk Hub"
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                  Village / Town / City *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter village or city"
+                  value={village}
+                  onChange={(e) => setVillage(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">District *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter district"
+                  value={district}
+                  onChange={(e) => setDistrict(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">State *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Enter state"
+                  value={stateName}
+                  onChange={(e) => setStateName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">Pincode *</label>
+                <input
+                  type="text"
+                  required
+                  maxLength="6"
+                  placeholder="e.g. 400001"
+                  value={pincode}
+                  onChange={(e) => setPincode(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Payment Options */}
-          <div>
-            <label className="block text-xs font-extrabold uppercase text-[#0F172A]/70 mb-2">Payment Method</label>
+          <div className="space-y-3 pt-2">
+            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
+              Payment Method
+            </h2>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              
               {/* Online Payment (Razorpay) */}
-              <div 
+              <div
                 onClick={() => setPaymentMethod('online')}
-                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${paymentMethod === 'online' ? 'border-[#FF8B8B] bg-[#FF8B8B]/10 ring-1 ring-[#FF8B8B]' : 'border-[#0F172A]/15 hover:border-[#0F172A]/30 bg-white'}`}
+                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
+                  paymentMethod === 'online'
+                    ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
               >
                 <div className="flex items-center space-x-3">
-                  <input type="radio" checked={paymentMethod === 'online'} readOnly className="accent-[#FF8B8B] w-4 h-4" />
-                  <span className="text-sm font-bold text-[#0F172A]">Pay Online (Razorpay)</span>
+                  <input
+                    type="radio"
+                    checked={paymentMethod === 'online'}
+                    readOnly
+                    className="accent-[#16a34a] w-4 h-4"
+                  />
+                  <span className="text-sm font-bold text-gray-900">Pay Online (Razorpay)</span>
                 </div>
-                <p className="text-xs font-medium text-[#0F172A]/60 mt-1 ml-7">UPI, GPay, Credit/Debit Cards, Netbanking</p>
+                <p className="text-xs font-medium text-gray-500 mt-1 ml-7">UPI, GPay, Cards, Netbanking</p>
               </div>
 
               {/* Cash on Delivery Option */}
-              <div 
+              <div
                 onClick={() => setPaymentMethod('cod')}
-                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${paymentMethod === 'cod' ? 'border-[#FF8B8B] bg-[#FF8B8B]/10 ring-1 ring-[#FF8B8B]' : 'border-[#0F172A]/15 hover:border-[#0F172A]/30 bg-white'}`}
+                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
+                  paymentMethod === 'cod'
+                    ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
+                    : 'border-gray-200 hover:border-gray-300 bg-white'
+                }`}
               >
                 <div className="flex items-center space-x-3">
-                  <input type="radio" checked={paymentMethod === 'cod'} readOnly className="accent-[#FF8B8B] w-4 h-4" />
-                  <span className="text-sm font-bold text-[#0F172A]">Cash on Delivery</span>
+                  <input
+                    type="radio"
+                    checked={paymentMethod === 'cod'}
+                    readOnly
+                    className="accent-[#16a34a] w-4 h-4"
+                  />
+                  <span className="text-sm font-bold text-gray-900">Cash on Delivery</span>
                 </div>
-                <p className="text-xs font-medium text-[#0F172A]/60 mt-1 ml-7">Pay via cash or UPI on delivery</p>
+                <p className="text-xs font-medium text-gray-500 mt-1 ml-7">Pay via cash or UPI on delivery</p>
               </div>
-
             </div>
           </div>
 
           {/* Total & Submit */}
           <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-            <span className="text-sm font-black text-[#0F172A]">Total Amount:</span>
-            <span className="text-lg font-black text-[#FF8B8B]">₹{subtotal}</span>
+            <span className="text-sm font-black text-gray-900">Total Amount:</span>
+            <span className="text-xl font-black text-[#16a34a]">₹{subtotal}</span>
           </div>
 
           <button
             type="submit"
             disabled={isProcessing}
-            className="w-full py-3.5 bg-[#0F172A] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#1E293B] transition-all shadow-md disabled:opacity-50"
+            className="w-full py-4 bg-[#16a34a] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#15803d] transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50"
           >
-            {isProcessing ? 'Processing Payment...' : paymentMethod === 'online' ? 'Pay Now via Razorpay' : 'Confirm Order (COD)'}
+            {isProcessing
+              ? 'Processing Payment...'
+              : paymentMethod === 'online'
+              ? 'Pay Now via Razorpay'
+              : 'Confirm Order (COD)'}
           </button>
         </form>
       </div>

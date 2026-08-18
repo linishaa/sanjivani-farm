@@ -60,18 +60,18 @@ function Navbar() {
       onClick={triggerWave}
       onTouchStart={triggerWave}
     >
-      {/* Liquid Slosh Animation - Subtle Drip Pulse */}
+      {/* Liquid Slosh Animation - Milk Drip Pulse */}
       {isHomePage && (
         <style>{`
-          @keyframes ganacheDripSlosh {
+          @keyframes milkDripSlosh {
             0% { transform: scaleY(1) translateY(0); }
-            25% { transform: scaleY(1.15) translateY(2px); }
-            50% { transform: scaleY(0.9) translateY(-1px); }
-            75% { transform: scaleY(1.05) translateY(1px); }
+            25% { transform: scaleY(1.2) translateY(3px); }
+            50% { transform: scaleY(0.85) translateY(-2px); }
+            75% { transform: scaleY(1.08) translateY(1px); }
             100% { transform: scaleY(1) translateY(0); }
           }
-          .animate-ganache {
-            animation: ganacheDripSlosh 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+          .animate-milk-drip {
+            animation: milkDripSlosh 0.85s cubic-bezier(0.34, 1.56, 0.64, 1);
             transform-origin: top center;
           }
         `}</style>
@@ -95,12 +95,12 @@ function Navbar() {
               />
               <div>
                 <span className="text-xl font-black text-[#0F172A] tracking-tight block">Sanjivani</span>
-                <span className="text-[10px] text-[#FF8B8B] font-extrabold uppercase tracking-widest block">Pure Farm Dairy</span>
+                <span className="text-[10px] text-[#16a34a] font-extrabold uppercase tracking-widest block">Pure Farm Dairy</span>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center space-x-1 bg-[#FFF8F5] p-1.5 rounded-full border border-[#0F172A]/10 shadow-inner z-10">
+            <div className="hidden md:flex items-center space-x-1 bg-[#f0fdf4] p-1.5 rounded-full border border-[#0F172A]/10 shadow-inner z-10">
               {navLinks.map((link) => {
                 const isActive = location.pathname === link.path;
                 return (
@@ -123,11 +123,11 @@ function Navbar() {
             <div className="hidden md:flex items-center space-x-3 z-10">
               <Link 
                 to="/wishlist" 
-                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#FFB5B5] transition-colors relative"
+                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
               >
                 <span className="text-base">❤️</span>
                 {wishlist.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#FF8B8B] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                  <span className="absolute -top-1 -right-1 bg-[#16a34a] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                     {wishlist.length}
                   </span>
                 )}
@@ -135,7 +135,7 @@ function Navbar() {
 
               <Link 
                 to="/cart"
-                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#FFB5B5] transition-colors relative"
+                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
               >
                 <span className="text-base">🛒</span>
                 {cartCount > 0 && (
@@ -147,13 +147,13 @@ function Navbar() {
 
               {/* DYNAMIC USER SECTION */}
               {activeUser ? (
-                <div className="flex items-center space-x-2 bg-[#FFF5F2] pl-3 pr-1 py-1 rounded-full border border-[#0F172A]/10">
+                <div className="flex items-center space-x-2 bg-[#f0fdf4] pl-3 pr-1 py-1 rounded-full border border-[#0F172A]/10">
                   <span className="text-xs font-black text-[#0F172A]">
                     👤 {activeUser.name || 'User'}
                   </span>
                   <button
                     onClick={handleLogout}
-                    className="px-3 py-1.5 bg-[#FF8B8B] text-white rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm hover:bg-[#ff7575] transition-all"
+                    className="px-3 py-1.5 bg-[#16a34a] text-white rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm hover:bg-[#15803d] transition-all"
                   >
                     Sign Out
                   </button>
@@ -200,18 +200,18 @@ function Navbar() {
         </div>
       </div>
 
-      {/* Slim, Subtle Milk Drips Overlay (Home Page Only) */}
+      {/* Realistic Organic Milk Drips Overlay (Home Page Only) */}
       {isHomePage && (
-        <div className="absolute top-full left-0 w-full overflow-hidden leading-none pointer-events-none z-30">
+        <div className="absolute top-full left-0 w-full overflow-hidden leading-none pointer-events-none z-30 drop-shadow-md">
           <svg 
             key={waveKey}
-            viewBox="0 0 1440 50" 
-            className={`w-full h-6 sm:h-8 md:h-10 text-white fill-current block ${waveKey > 0 ? 'animate-ganache' : ''}`}
+            viewBox="0 0 1440 60" 
+            className={`w-full h-7 sm:h-10 md:h-12 text-white fill-current block ${waveKey > 0 ? 'animate-milk-drip' : ''}`}
             preserveAspectRatio="none"
             xmlns="http://www.w3.org/2000/svg"
           >
             <path 
-              d="M 0,0 L 1440,0 L 1440,10 C 1410,10 1400,38 1370,38 C 1340,38 1330,10 1300,10 C 1270,10 1260,46 1220,46 C 1180,46 1170,10 1140,10 C 1110,10 1100,28 1070,28 C 1040,28 1030,10 1000,10 C 970,10 960,48 920,48 C 880,48 870,10 840,10 C 810,10 800,34 770,34 C 740,34 730,10 700,10 C 670,10 660,42 620,42 C 580,52 570,10 540,10 C 510,10 500,26 470,26 C 440,26 430,10 400,10 C 370,10 360,45 320,45 C 280,45 270,10 240,10 C 210,10 200,32 170,32 C 140,32 130,10 100,10 C 70,10 60,40 30,40 C 15,40 5,10 0,10 Z" 
+              d="M0,0 L1440,0 L1440,12 C1415,12 1400,38 1365,38 C1330,38 1320,14 1290,14 C1260,14 1250,46 1210,46 C1170,46 1160,14 1130,14 C1100,14 1090,32 1060,32 C1030,32 1020,12 990,12 C960,12 950,52 905,52 C860,52 850,14 820,14 C790,14 780,36 750,36 C720,36 710,12 680,12 C650,12 640,44 600,44 C560,44 550,16 520,16 C490,16 480,30 450,30 C420,30 410,12 380,12 C350,12 340,48 295,48 C250,48 240,14 210,14 C180,14 170,34 140,34 C110,34 100,12 70,12 C45,12 20,35 0,35 Z" 
             />
           </svg>
         </div>
@@ -228,7 +228,7 @@ function Navbar() {
                 to={link.path} 
                 onClick={() => setIsOpen(false)}
                 className={`block px-4 py-3 rounded-2xl text-xs font-black tracking-wider transition-all ${
-                  isActive ? 'bg-[#0F172A] text-white' : 'text-[#0F172A] bg-gray-50 hover:bg-[#FFB5B5]/20'
+                  isActive ? 'bg-[#0F172A] text-white' : 'text-[#0F172A] bg-gray-50 hover:bg-[#dcfce7]/50'
                 }`}
               >
                 {link.name.toUpperCase()}
@@ -239,7 +239,7 @@ function Navbar() {
           <Link 
             to="/wishlist" 
             onClick={() => setIsOpen(false)}
-            className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-pink-50"
+            className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-emerald-50"
           >
             MY WISHLIST ({wishlist.length}) ❤️
           </Link>
@@ -255,12 +255,12 @@ function Navbar() {
           {/* DYNAMIC MOBILE USER SECTION */}
           {activeUser ? (
             <div className="pt-2 border-t border-gray-100 space-y-2">
-              <div className="px-4 py-2 bg-[#FFF5F2] rounded-2xl text-xs font-bold text-[#0F172A]">
+              <div className="px-4 py-2 bg-[#f0fdf4] rounded-2xl text-xs font-bold text-[#0F172A]">
                 Signed in as: <span className="font-extrabold">{activeUser.name}</span>
               </div>
               <button 
                 onClick={handleLogout}
-                className="block w-full text-center py-3.5 bg-[#FF8B8B] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md"
+                className="block w-full text-center py-3.5 bg-[#16a34a] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md hover:bg-[#15803d]"
               >
                 Sign Out
               </button>
