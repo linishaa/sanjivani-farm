@@ -70,7 +70,7 @@ const FARM_PILLARS = [
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
-    btnText: "Book Farm Tour",
+    btnText: "Book Services",
   },
 ];
 
@@ -158,7 +158,7 @@ function Home() {
               to="/services"
               className="px-7 py-4 bg-white/90 backdrop-blur-md text-[#1B4D3E] font-black text-xs uppercase tracking-wider rounded-full shadow-sm hover:bg-white transition-all border border-white text-center"
             >
-              Book Farm Tour
+              Book Services
             </Link>
           </div>
 
