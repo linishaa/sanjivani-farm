@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProducts } from '../context/ProductContext';
+import { API_ROOT_URL } from '../utils/apiService';
 
 function Checkout() {
   const navigate = useNavigate();
-  const { cart = [], currentUser: contextUser } = useProducts() || {};
+  const { cart = [], currentUser: contextUser, clearCart, addOrder } = useProducts() || {};
 
   const [paymentMethod, setPaymentMethod] = useState('online');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -15,12 +16,6 @@ function Checkout() {
   const [district, setDistrict] = useState('');
   const [stateName, setStateName] = useState('');
   const [pincode, setPincode] = useState('');
-
-  // Dynamically switch between local Flask backend and Render URL
-  const API_BASE_URL =
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://127.0.0.1:5000'
-      : 'https://sanjivani-farmbackend.onrender.com';
 
   // Fallback to localStorage for currentUser session persistence
   const getStoredUser = () => {
@@ -97,9 +92,31 @@ function Checkout() {
 
     // ------------------- OPTION A: CASH ON DELIVERY -------------------
     if (paymentMethod === 'cod') {
-      alert(`Order placed successfully via Cash on Delivery for ${currentUser.name || 'Customer'}!\nShipping Address: ${fullAddress}`);
-      setIsProcessing(false);
-      navigate('/');
+      try {
+        const codResponse = await fetch(`${API_ROOT_URL}/api/place-order-cod`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            address: fullAddress,
+            cart,
+            totalAmount: subtotal,
+            userEmail: currentUser.email || '',
+            userPhone: currentUser.phone || '',
+          }),
+        });
+        const codData = await codResponse.json();
+        if (!codResponse.ok || !codData.success) {
+          throw new Error(codData.message || 'Unable to place the COD order.');
+        }
+        addOrder?.({ id: codData.order_id, customer: currentUser.name || 'Customer', items: cart, total: subtotal, paymentMethod: 'Cash on Delivery', status: 'Order Placed (COD)' });
+        clearCart?.();
+        alert(`Order ${codData.order_id} placed successfully. We sent the confirmation through the available notification channels.`);
+        navigate('/orders');
+      } catch (error) {
+        alert(error.message || 'Could not place your COD order. Please try again.');
+      } finally {
+        setIsProcessing(false);
+      }
       return;
     }
 
@@ -113,7 +130,7 @@ function Checkout() {
       }
 
       // Step 1: Create Order on Backend
-      const orderResponse = await fetch(`${API_BASE_URL}/api/create-razorpay-order`, {
+      const orderResponse = await fetch(`${API_ROOT_URL}/api/create-razorpay-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: subtotal }),
@@ -145,7 +162,7 @@ function Checkout() {
         },
         handler: async function (response) {
           // Step 3: Verify Payment on Backend
-          const verifyResponse = await fetch(`${API_BASE_URL}/api/verify-payment`, {
+          const verifyResponse = await fetch(`${API_ROOT_URL}/api/verify-payment`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -154,15 +171,19 @@ function Checkout() {
               razorpay_signature: response.razorpay_signature,
               address: fullAddress,
               cart: cart,
-              userEmail: currentUser.email || currentUser.phone,
+              totalAmount: subtotal,
+              userEmail: currentUser.email || '',
+              userPhone: currentUser.phone || '',
             }),
           });
 
           const verifyData = await verifyResponse.json();
 
           if (verifyData.success) {
-            alert('🎉 Payment Successful! Your order has been placed.');
-            navigate('/');
+            addOrder?.({ id: response.razorpay_order_id, customer: currentUser.name || 'Customer', items: cart, total: subtotal, paymentMethod: 'Online Payment (Razorpay)', status: 'Paid & Confirmed' });
+            clearCart?.();
+            alert('🎉 Payment successful! Your order has been placed and confirmation notifications have been sent.');
+            navigate('/orders');
           } else {
             alert('Payment verification failed. Please contact support.');
           }

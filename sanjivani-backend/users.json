@@ -4,5 +4,11 @@
         "email": "linishalorancez@gmail.com",
         "phone": "8943584058",
         "password_hash": null
+    },
+    "8921011502": {
+        "full_name": "jeevan",
+        "email": "",
+        "phone": "8921011502",
+        "password_hash": "scrypt:32768:8:1$ce6rl4zkayCYt2Pm$5ab8e7f5c89025ec482b79601d8833eeba4d8bf280bfc407ac8b0c83cb985e9264189463b1a3f0df556457f3df86e834fd9ed79cae355842392ddf8804f85a08"
     }
 }

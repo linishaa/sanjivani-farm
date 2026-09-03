@@ -1,4 +1,9 @@
-const API_BASE_URL = 'https://sanjivani-farmbackend.onrender.com/api';
+export const API_ROOT_URL = import.meta.env.VITE_API_ROOT_URL ||
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://127.0.0.1:5000'
+        : 'https://sanjivani-farmbackend.onrender.com');
+
+export const API_BASE_URL = `${API_ROOT_URL}/api`;
 
 // Send OTP to user's email
 export const sendOTP = async (userEmail) => {

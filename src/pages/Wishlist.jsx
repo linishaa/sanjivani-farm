@@ -1,20 +1,93 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { PRODUCTS } from '../data/products';
 import { useProducts } from '../context/ProductContext';
 
 function Wishlist() {
-  const { products, wishlist, toggleWishlist } = useProducts();
+  const productContext = useProducts() || {};
+  const { products = PRODUCTS, wishlist = [], toggleWishlist, addToCart } = productContext;
+  const [toast, setToast] = useState('');
 
-  // Safely handle undefined values
-  const safeProducts = products || [];
-  const safeWishlist = wishlist || [];
+  // Emergency fallback to match what Products.jsx saved to localStorage
+  const [localWishlist, setLocalWishlist] = useState(() => {
+    try {
+      const saved = localStorage.getItem('client_wishlist');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
-  const wishlistedProducts = safeProducts.filter((product) =>
-    safeWishlist.includes(product.id)
-  );
+  // Keep local wishlist synced with storage changes
+  useEffect(() => {
+    const handleStorageChange = () => {
+      try {
+        const saved = localStorage.getItem('client_wishlist');
+        if (saved) setLocalWishlist(JSON.parse(saved));
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const activeWishlist = wishlist.length > 0 ? wishlist : localWishlist;
+  const safeProducts = Array.isArray(products) && products.length > 0 ? products : PRODUCTS;
+
+  // Bulletproof matching: handles IDs stored as strings, numbers, or objects
+  const wishlistedProducts = safeProducts.filter((product) => {
+    if (!product) return false;
+    return activeWishlist.some(item => {
+      const itemId = typeof item === 'object' && item !== null ? item.id : item;
+      return String(itemId) === String(product.id);
+    });
+  });
+
+  const handleAddToCart = (product) => {
+    if (!product || product.isSoldOut) return;
+    if (addToCart) addToCart(product);
+    setToast(`Added ${product.name || 'item'} to cart!`);
+    setTimeout(() => setToast(''), 3000);
+  };
+
+  const handleRemoveFromWishlist = (product) => {
+    if (typeof toggleWishlist === 'function') {
+      try {
+        toggleWishlist(product.id);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Update local storage fallback instantly
+    setLocalWishlist(prev => {
+      const updated = prev.filter(item => {
+        const itemId = typeof item === 'object' && item !== null ? item.id : item;
+        return String(itemId) !== String(product.id);
+      });
+      try {
+        localStorage.setItem('client_wishlist', JSON.stringify(updated));
+      } catch (e) {
+        console.error(e);
+      }
+      return updated;
+    });
+
+    setToast(`Removed ${product.name || 'item'} from wishlist`);
+    setTimeout(() => setToast(''), 3000);
+  };
 
   return (
-    <div className="bg-[#F8F5E6] min-h-screen py-12 px-4 sm:px-6 lg:px-8 text-[#0F172A]">
+    <div className="bg-[#F8F5E6] min-h-screen py-12 px-4 sm:px-6 lg:px-8 text-[#0F172A] relative">
+      
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-[99999] bg-[#0F172A] text-white px-6 py-3 rounded-xl shadow-xl font-bold text-sm flex items-center gap-2 animate-bounce">
+          <span>✨</span> {toast}
+        </div>
+      )}
+
       <div className="max-w-5xl mx-auto space-y-8">
 
         {/* Header */}
@@ -41,12 +114,7 @@ function Wishlist() {
         {/* Wishlist Content */}
         {wishlistedProducts.length === 0 ? (
 
-          /* ==========================================
-             EMPTY WISHLIST
-          ========================================== */
           <div className="text-center flex flex-col items-center">
-
-            {/* Cow Illustration */}
             <div className="w-full flex justify-center px-4 pt-2">
               <img
                 src="/oops.png"
@@ -55,9 +123,7 @@ function Wishlist() {
               />
             </div>
 
-            {/* Empty State Text */}
             <div className="px-6 -mt-2">
-
               <h2 className="text-2xl sm:text-3xl font-black tracking-tight">
                 Oops! Nothing here.
               </h2>
@@ -73,28 +139,22 @@ function Wishlist() {
               >
                 Browse Products
               </Link>
-
             </div>
           </div>
 
         ) : (
 
-          /* ==========================================
-             WISHLIST PRODUCTS
-          ========================================== */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-
             {wishlistedProducts.map((product) => (
 
               <div
                 key={product.id}
                 className="bg-white rounded-3xl p-5 border border-[#0F172A]/10 shadow-sm flex flex-col justify-between relative group"
               >
-
                 {/* Remove Heart Button */}
                 <button
-                  onClick={() => toggleWishlist(product.id)}
-                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-colors z-10"
+                  onClick={() => handleRemoveFromWishlist(product)}
+                  className="absolute top-4 right-4 w-9 h-9 rounded-full bg-red-50 text-red-500 flex items-center justify-center hover:bg-red-100 transition-colors z-10 cursor-pointer shadow-sm"
                   title="Remove from wishlist"
                   aria-label={`Remove ${product.name} from wishlist`}
                 >
@@ -102,8 +162,6 @@ function Wishlist() {
                 </button>
 
                 <div className="space-y-3">
-
-                  {/* Product Image */}
                   <div
                     className="h-40 rounded-2xl flex items-center justify-center p-4"
                     style={{
@@ -117,26 +175,24 @@ function Wishlist() {
                     />
                   </div>
 
-                  {/* Product Details */}
                   <div>
                     <h3 className="font-black text-lg">
                       {product.name}
                     </h3>
 
                     <p className="text-xs font-black text-[#FF8B8B] mt-0.5">
-                      {product.price}
+                      Rs. {product.price}
                     </p>
 
                     <p className="text-xs text-[#0F172A]/70 font-medium mt-1 line-clamp-2">
                       {product.description}
                     </p>
                   </div>
-
                 </div>
 
-                {/* Add to Order */}
                 <div className="pt-4 flex gap-2">
                   <button
+                    onClick={() => handleAddToCart(product)}
                     disabled={product.isSoldOut}
                     className={`w-full py-2.5 rounded-full text-xs font-extrabold uppercase tracking-wider transition-all shadow-sm ${
                       product.isSoldOut
@@ -144,16 +200,12 @@ function Wishlist() {
                         : 'bg-[#0F172A] text-white hover:bg-[#1e293b]'
                     }`}
                   >
-                    {product.isSoldOut
-                      ? 'Sold Out'
-                      : 'Add to Order'}
+                    {product.isSoldOut ? 'Sold Out' : 'Add to Order'}
                   </button>
                 </div>
-
               </div>
 
             ))}
-
           </div>
         )}
 

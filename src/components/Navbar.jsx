@@ -42,6 +42,13 @@ function Navbar() {
   const isHomePage = location.pathname === '/';
   const cartCount = cart.reduce((acc, item) => acc + (item.quantity || 1), 0);
 
+  // Check if current user is an admin
+  const isAdmin = activeUser && (
+    activeUser.role === 'admin' || 
+    activeUser.name?.toLowerCase() === 'admin' || 
+    activeUser.email?.toLowerCase() === 'admin'
+  );
+
   const navLinks = [
     { name: 'Home', path: '/' },
     { name: 'Products ', path: '/products' },
@@ -83,7 +90,7 @@ function Navbar() {
           <div className="flex justify-between h-20 items-center">
             
             {/* Brand Logo & Name */}
-            <Link to="/" className="flex items-center space-x-3 group z-10">
+            <Link to={isAdmin ? "/admin" : "/"} className="flex items-center space-x-3 group z-10">
               <img 
                 src="/logo.png" 
                 alt="Sanjivani Logo" 
@@ -95,93 +102,132 @@ function Navbar() {
               />
               <div>
                 <span className="text-xl font-black text-[#0F172A] tracking-tight block">Sanjivani</span>
-                <span className="text-[10px] text-[#16a34a] font-extrabold uppercase tracking-widest block">Pure Farm Dairy</span>
+                <span className="text-[10px] text-[#16a34a] font-extrabold uppercase tracking-widest block">
+                  {isAdmin ? 'Admin Portal' : 'Pure Farm Dairy'}
+                </span>
               </div>
             </Link>
 
             {/* Desktop Navigation Links */}
-            <div className="hidden md:flex items-center space-x-1 bg-[#f0fdf4] p-1.5 rounded-full border border-[#0F172A]/10 shadow-inner z-10">
-              {navLinks.map((link) => {
-                const isActive = location.pathname === link.path;
-                return (
-                  <Link
-                    key={link.path}
-                    to={link.path}
-                    className={`px-5 py-2 rounded-full text-xs font-black tracking-wider transition-all ${
-                      isActive
-                        ? 'bg-[#0F172A] text-white shadow-sm'
-                        : 'text-[#0F172A]/70 hover:text-[#0F172A] hover:bg-white/80'
-                    }`}
-                  >
-                    {link.name.toUpperCase()}
-                  </Link>
-                );
-              })}
-            </div>
+            {!isAdmin && (
+              <div className="hidden md:flex items-center space-x-1 bg-[#f0fdf4] p-1.5 rounded-full border border-[#0F172A]/10 shadow-inner z-10">
+                {navLinks.map((link) => {
+                  const isActive = location.pathname === link.path;
+                  return (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`px-5 py-2 rounded-full text-xs font-black tracking-wider transition-all ${
+                        isActive
+                          ? 'bg-[#0F172A] text-white shadow-sm'
+                          : 'text-[#0F172A]/70 hover:text-[#0F172A] hover:bg-white/80'
+                      }`}
+                    >
+                      {link.name.toUpperCase()}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Desktop Action Buttons */}
             <div className="hidden md:flex items-center space-x-3 z-10">
-              <Link 
-                to="/wishlist" 
-                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
-              >
-                <span className="text-base">❤️</span>
-                {wishlist.length > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#16a34a] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                    {wishlist.length}
-                  </span>
-                )}
-              </Link>
-
-              <Link 
-                to="/cart"
-                className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
-              >
-                <span className="text-base">🛒</span>
-                {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-[#0F172A] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                    {cartCount}
-                  </span>
-                )}
-              </Link>
-
-              {/* DYNAMIC USER SECTION */}
-              {activeUser ? (
-                <div className="flex items-center space-x-2 bg-[#f0fdf4] pl-3 pr-1 py-1 rounded-full border border-[#0F172A]/10">
-                  <span className="text-xs font-black text-[#0F172A]">
-                    👤 {activeUser.name || 'User'}
-                  </span>
+              {isAdmin ? (
+                // ADMIN NAVBAR ACTIONS
+                <div className="flex items-center space-x-3">
+                  <Link 
+                    to="/admin" 
+                    className="px-5 py-2.5 bg-[#16a34a] text-white rounded-full text-xs font-black uppercase tracking-wider shadow-md hover:bg-[#15803d] transition-all"
+                  >
+                    ⚙️ Admin Dashboard
+                  </Link>
                   <button
                     onClick={handleLogout}
-                    className="px-3 py-1.5 bg-[#16a34a] text-white rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm hover:bg-[#15803d] transition-all"
+                    className="px-5 py-2.5 bg-[#0F172A] text-white rounded-full text-xs font-black uppercase tracking-wider shadow-md hover:bg-[#1e293b] transition-all"
                   >
                     Sign Out
                   </button>
                 </div>
               ) : (
-                <Link 
-                  to="/login" 
-                  className="px-6 py-2.5 bg-[#0F172A] text-white rounded-full text-xs font-extrabold uppercase tracking-wider shadow-md hover:bg-[#1e293b] transition-all transform hover:-translate-y-0.5"
-                >
-                  Sign In
-                </Link>
+                // CUSTOMER NAVBAR ACTIONS
+                <>
+                  <Link 
+                    to="/wishlist" 
+                    className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
+                    title="Wishlist"
+                  >
+                    <span className="text-base">❤️</span>
+                    {wishlist.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#16a34a] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                        {wishlist.length}
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link 
+                    to="/cart"
+                    className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
+                    title="Cart"
+                  >
+                    <span className="text-base">🛒</span>
+                    {cartCount > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#0F172A] text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                        {cartCount}
+                      </span>
+                    )}
+                  </Link>
+
+                  {activeUser && (
+                    <Link 
+                      to="/orders"
+                      className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 hover:bg-[#dcfce7] transition-colors relative"
+                      title="My Orders"
+                    >
+                      <span className="text-base">📦</span>
+                    </Link>
+                  )}
+
+                  {activeUser ? (
+                    <div className="flex items-center space-x-2 bg-[#f0fdf4] pl-3 pr-1 py-1 rounded-full border border-[#0F172A]/10">
+                      <Link to="/orders" className="text-xs font-black text-[#0F172A] hover:text-[#16a34a] transition-colors">
+                        👤 {activeUser.name || 'User'}
+                      </Link>
+                      <button
+                        onClick={handleLogout}
+                        className="px-3 py-1.5 bg-[#16a34a] text-white rounded-full text-[10px] font-extrabold uppercase tracking-wider shadow-sm hover:bg-[#15803d] transition-all"
+                      >
+                        Sign Out
+                      </button>
+                    </div>
+                  ) : (
+                    <Link 
+                      to="/login" 
+                      className="px-6 py-2.5 bg-[#0F172A] text-white rounded-full text-xs font-extrabold uppercase tracking-wider shadow-md hover:bg-[#1e293b] transition-all transform hover:-translate-y-0.5"
+                    >
+                      Sign In
+                    </Link>
+                  )}
+                </>
               )}
             </div>
 
             {/* Mobile Navigation Toggle */}
             <div className="md:hidden flex items-center space-x-2 z-10">
-              <Link 
-                to="/wishlist" 
-                className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 relative"
-              >
-                <span className="text-sm">❤️</span>
-              </Link>
-              <Link 
-                to="/cart" 
-                className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10 relative"
-              >
-                <span className="text-sm">🛒</span>
-              </Link>
+              {!isAdmin && (
+                <>
+                  <Link to="/wishlist" className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10">
+                    <span className="text-sm">❤️</span>
+                  </Link>
+                  <Link to="/cart" className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10">
+                    <span className="text-sm">🛒</span>
+                  </Link>
+                  {activeUser && (
+                    <Link to="/orders" className="w-9 h-9 bg-white rounded-full flex items-center justify-center shadow-sm border border-[#0F172A]/10">
+                      <span className="text-sm">📦</span>
+                    </Link>
+                  )}
+                </>
+              )}
               <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="text-[#0F172A] focus:outline-none p-2 rounded-full bg-white shadow-sm border border-[#0F172A]/10"
@@ -200,8 +246,8 @@ function Navbar() {
         </div>
       </div>
 
-      {/* Realistic Organic Milk Drips Overlay (Home Page Only) */}
-      {isHomePage && (
+      {/* Realistic Organic Milk Drips Overlay (Home Page Only & Non-Admin) */}
+      {isHomePage && !isAdmin && (
         <div className="absolute top-full left-0 w-full overflow-hidden leading-none pointer-events-none z-30 drop-shadow-md">
           <svg 
             key={waveKey}
@@ -220,59 +266,91 @@ function Navbar() {
       {/* Mobile Menu Dropdown */}
       {isOpen && (
         <div className="md:hidden bg-white border-t border-[#0F172A]/10 px-6 pt-4 pb-6 space-y-3 shadow-xl relative z-40">
-          {navLinks.map((link) => {
-            const isActive = location.pathname === link.path;
-            return (
-              <Link 
-                key={link.path}
-                to={link.path} 
-                onClick={() => setIsOpen(false)}
-                className={`block px-4 py-3 rounded-2xl text-xs font-black tracking-wider transition-all ${
-                  isActive ? 'bg-[#0F172A] text-white' : 'text-[#0F172A] bg-gray-50 hover:bg-[#dcfce7]/50'
-                }`}
-              >
-                {link.name.toUpperCase()}
-              </Link>
-            );
-          })}
-
-          <Link 
-            to="/wishlist" 
-            onClick={() => setIsOpen(false)}
-            className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-emerald-50"
-          >
-            MY WISHLIST ({wishlist.length}) ❤️
-          </Link>
-
-          <Link 
-            to="/cart" 
-            onClick={() => setIsOpen(false)}
-            className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-amber-50"
-          >
-            MY CART ({cartCount}) 🛒
-          </Link>
-
-          {/* DYNAMIC MOBILE USER SECTION */}
-          {activeUser ? (
-            <div className="pt-2 border-t border-gray-100 space-y-2">
-              <div className="px-4 py-2 bg-[#f0fdf4] rounded-2xl text-xs font-bold text-[#0F172A]">
-                Signed in as: <span className="font-extrabold">{activeUser.name}</span>
+          {isAdmin ? (
+            <div className="space-y-3">
+              <div className="px-4 py-2 bg-emerald-50 rounded-2xl text-xs font-bold text-[#0F172A]">
+                Signed in as: <span className="font-extrabold text-[#16a34a]">Admin</span>
               </div>
+              <Link 
+                to="/admin" 
+                onClick={() => setIsOpen(false)}
+                className="block w-full text-center px-4 py-3.5 bg-[#16a34a] text-white rounded-2xl text-xs font-black tracking-wider shadow-md"
+              >
+                ⚙️ ADMIN DASHBOARD
+              </Link>
               <button 
                 onClick={handleLogout}
-                className="block w-full text-center py-3.5 bg-[#16a34a] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md hover:bg-[#15803d]"
+                className="block w-full text-center py-3.5 bg-[#0F172A] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md"
               >
                 Sign Out
               </button>
             </div>
           ) : (
-            <Link 
-              to="/login" 
-              onClick={() => setIsOpen(false)}
-              className="block w-full text-center py-3.5 bg-[#0F172A] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md mt-2"
-            >
-              Sign In
-            </Link>
+            <>
+              {navLinks.map((link) => {
+                const isActive = location.pathname === link.path;
+                return (
+                  <Link 
+                    key={link.path}
+                    to={link.path} 
+                    onClick={() => setIsOpen(false)}
+                    className={`block px-4 py-3 rounded-2xl text-xs font-black tracking-wider transition-all ${
+                      isActive ? 'bg-[#0F172A] text-white' : 'text-[#0F172A] bg-gray-50 hover:bg-[#dcfce7]/50'
+                    }`}
+                  >
+                    {link.name.toUpperCase()}
+                  </Link>
+                );
+              })}
+
+              <Link 
+                to="/wishlist" 
+                onClick={() => setIsOpen(false)}
+                className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-emerald-50"
+              >
+                MY WISHLIST ({wishlist.length}) ❤️
+              </Link>
+
+              <Link 
+                to="/cart" 
+                onClick={() => setIsOpen(false)}
+                className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-amber-50"
+              >
+                MY CART ({cartCount}) 🛒
+              </Link>
+
+              {activeUser && (
+                <Link 
+                  to="/orders" 
+                  onClick={() => setIsOpen(false)}
+                  className="block px-4 py-3 rounded-2xl text-xs font-black tracking-wider text-[#0F172A] bg-emerald-100/60"
+                >
+                  MY ORDERS 📦
+                </Link>
+              )}
+
+              {activeUser ? (
+                <div className="pt-2 border-t border-gray-100 space-y-2">
+                  <div className="px-4 py-2 bg-[#f0fdf4] rounded-2xl text-xs font-bold text-[#0F172A]">
+                    Signed in as: <span className="font-extrabold">{activeUser.name}</span>
+                  </div>
+                  <button 
+                    onClick={handleLogout}
+                    className="block w-full text-center py-3.5 bg-[#16a34a] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md hover:bg-[#15803d]"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <Link 
+                  to="/login" 
+                  onClick={() => setIsOpen(false)}
+                  className="block w-full text-center py-3.5 bg-[#0F172A] text-white rounded-2xl font-extrabold text-xs uppercase tracking-wider shadow-md mt-2"
+                >
+                  Sign In
+                </Link>
+              )}
+            </>
           )}
         </div>
       )}
