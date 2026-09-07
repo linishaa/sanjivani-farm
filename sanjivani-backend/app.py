@@ -1,14 +1,12 @@
 import os
 import json
 import random
-import smtplib
 import threading
 import queue
 from datetime import datetime, timezone
 import razorpay
 from urllib.parse import quote
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import urllib.request
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -30,7 +28,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # --- ENVIRONMENT & CREDENTIALS ---
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
-SENDER_PASSWORD = os.environ.get("SENDER_PASSWORD")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL or "")
 
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "YOUR_TWILIO_ACCOUNT_SID")
@@ -120,26 +118,41 @@ def publish_web_notification(title, message, kind="info"):
                 notification_subscribers.remove(subscriber)
     return notification
 
-def send_email_via_smtp(to_email, subject, body):
-    if not SENDER_EMAIL or not SENDER_PASSWORD or not to_email:
-        print("Email not sent: configure SENDER_EMAIL and SENDER_PASSWORD.")
+def send_email_via_http(to_email, subject, html_body):
+    api_key = os.environ.get("BREVO_API_KEY")
+    sender_email = os.environ.get("SENDER_EMAIL")
+    
+    if not api_key or not sender_email or not to_email:
+        print("Brevo API key, SENDER_EMAIL, or recipient email missing.")
         return False
+        
+    url = "https://api.brevo.com/v3/smtp/email"
+    payload = {
+        "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body
+    }
+    
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json"
+    }
+    
     try:
-        msg = MIMEMultipart()
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
-
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, to_email, msg.as_string())
-        server.quit()
-        return True
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(payload).encode('utf-8'), 
+            headers=headers, 
+            method='POST'
+        )
+        with urllib.request.urlopen(req) as response:
+            if response.status in [200, 201]:
+                return True
     except Exception as e:
-        print(f"Error sending email: {e}")
-        return False
+        print(f"Error sending email via Brevo HTTP API: {e}")
+    return False
 
 def is_email(value):
     return isinstance(value, str) and "@" in value and "." in value.rsplit("@", 1)[-1]
@@ -249,13 +262,13 @@ def send_email_otp():
     </div>
     """
 
-    if send_email_via_smtp(email, "Your Sanjivani Farm Verification Code", html_content):
+    if send_email_via_http(email, "Your Sanjivani Farm Verification Code", html_content):
         return jsonify({"success": True, "otp": otp, "message": f"OTP sent to {email}"}), 200
     else:
         return jsonify({
             "success": False,
             "otp": "123456",
-            "message": "Failed to send email via SMTP. Fallback demo code: 123456"
+            "message": "Failed to send email via Brevo HTTP API. Fallback demo code: 123456"
         }), 500
 
 
@@ -437,7 +450,7 @@ def broadcast_offer():
                 failed_count += 1
 
             if user.get('email'):
-                send_email_via_smtp(user['email'], "New offer from Sanjivani Dairy Farm", f"<p>{message}</p>")
+                send_email_via_http(user['email'], "New offer from Sanjivani Dairy Farm", f"<p>{message}</p>")
 
         publish_web_notification("New offer", offer_text or "🎁 New Exclusive Offer from Sanjivani Farm!", "offer")
 
@@ -544,7 +557,7 @@ def verify_payment():
                 <ul>{cart_items_html}</ul>
             </div>
             """
-            send_email_via_smtp(user_email, "Order Confirmation - Sanjivani Dairy Farm", customer_html)
+            send_email_via_http(user_email, "Order Confirmation - Sanjivani Dairy Farm", customer_html)
 
         # 2. Owner Email
         owner_html = f"""
@@ -559,7 +572,7 @@ def verify_payment():
             <ul>{cart_items_html}</ul>
         </div>
         """
-        send_email_via_smtp(OWNER_EMAIL, f"New online order from {user_email or user_phone} (Rs. {total_amount})", owner_html)
+        send_email_via_http(OWNER_EMAIL, f"New online order from {user_email or user_phone} (Rs. {total_amount})", owner_html)
 
         customer_message = f"Sanjivani order confirmed. Payment received: Rs. {total_amount}. Order ID: {razorpay_order_id}."
         send_whatsapp(user_phone, customer_message)
@@ -622,7 +635,7 @@ def place_order_cod():
                 <ul>{cart_items_html}</ul>
             </div>
             """
-            send_email_via_smtp(user_email, "COD Order Confirmation - Sanjivani Dairy Farm", customer_html)
+            send_email_via_http(user_email, "COD Order Confirmation - Sanjivani Dairy Farm", customer_html)
 
         # 2. Owner Email
         owner_html = f"""
@@ -637,7 +650,7 @@ def place_order_cod():
             <ul>{cart_items_html}</ul>
         </div>
         """
-        send_email_via_smtp(OWNER_EMAIL, f"New COD order (Rs. {total_amount})", owner_html)
+        send_email_via_http(OWNER_EMAIL, f"New COD order (Rs. {total_amount})", owner_html)
         send_whatsapp(user_phone, f"Sanjivani order received. Pay ₹{total_amount} on delivery. Order ID: {order_id}.")
         send_whatsapp(OWNER_WHATSAPP_NUMBER, f"New COD order {order_id}: Rs. {total_amount} from {user_email or user_phone}.")
         publish_web_notification("Order placed", f"Your COD order {order_id} is confirmed. Please keep ₹{total_amount} ready for delivery.", "order")
