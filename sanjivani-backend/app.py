@@ -656,55 +656,36 @@ def get_admin_orders():
 
 
 @app.route('/api/user-orders', methods=['GET'])
-def get_user_orders():
-    email = request.args.get('email', '').strip()
-    if not email:
-        return jsonify({"success": False, "message": "Email is required."}), 400
-
-    user_orders = [o for o in orders_db if o.get('user_email') == email]
-    return jsonify({"success": True, "orders": user_orders}), 200
-
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
-
-
-
-
-ORDERS_FILE = 'orders.json'
-
 @app.route('/api/orders', methods=['GET'])
 def get_user_orders():
-    identifier = request.args.get('identifier', '').strip().lower()
+    identifier = request.args.get('identifier', '').strip().lower() or request.args.get('email', '').strip().lower()
     
-    if not os.path.exists(ORDERS_FILE):
-        return jsonify({'orders': []})
-    
-    try:
-        with open(ORDERS_FILE, 'r') as f:
-            orders = json.load(f)
-    except Exception as e:
-        print("Error reading orders:", e)
-        orders = []
+    if not orders_db:
+        return jsonify({'success': True, 'orders': []}), 200
 
     if not identifier:
-        return jsonify({'orders': orders})
+        return jsonify({'success': True, 'orders': orders_db}), 200
 
-    # Filter orders matching email, phone, name, or contact
+    # Filter orders matching stored attributes or nested address fields securely
     filtered_orders = []
-    for order in orders:
+    for order in orders_db:
+        user_email = str(order.get('user_email', '')).lower()
+        user_phone = str(order.get('user_phone', '')).lower()
+        address = order.get('address', {}) or {}
+        addr_name = str(address.get('fullName', '')).lower()
+        addr_phone = str(address.get('phone', '')).lower()
+
         match = (
-            identifier in str(order.get('email', '')).lower() or
-            identifier in str(order.get('phone', '')).lower() or
-            identifier in str(order.get('customer_name', '')).lower() or
-            identifier in str(order.get('name', '')).lower() or
-            identifier in str(order.get('contact', '')).lower()
+            identifier in user_email or
+            identifier in user_phone or
+            identifier in addr_name or
+            identifier in addr_phone
         )
         if match:
             filtered_orders.append(order)
 
-    # If no strict match is found during testing, return all orders so you can see them immediately
-    if not filtered_orders and orders:
-        filtered_orders = orders
+    return jsonify({'success': True, 'orders': filtered_orders}), 200
 
-    return jsonify({'orders': filtered_orders})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
