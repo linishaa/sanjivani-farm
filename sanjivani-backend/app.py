@@ -3,6 +3,9 @@ import json
 import random
 import threading
 import queue
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
 import razorpay
 from urllib.parse import quote
@@ -21,16 +24,17 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- CORS & UPLOAD CONFIGURATION ---
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 UPLOAD_FOLDER = os.path.join('static', 'uploads', 'offers')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # --- ENVIRONMENT & CREDENTIALS ---
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "sanjivanidairyfarm40@gmail.com")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL or "sanjivanidairyfarm40@gmail.com")
+OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL)
 
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "YOUR_TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "YOUR_TWILIO_AUTH_TOKEN")
@@ -120,46 +124,63 @@ def publish_web_notification(title, message, kind="info"):
     return notification
 
 def send_email_via_http(to_email, subject, html_body):
-    api_key = os.environ.get("BREVO_API_KEY")
     sender_email = os.environ.get("SENDER_EMAIL") or "sanjivanidairyfarm40@gmail.com"
+    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
     
-    if not api_key:
-        print("ERROR: BREVO_API_KEY is not configured in environment variables.")
-        return False
-        
-    url = "https://api.brevo.com/v3/smtp/email"
-    payload = {
-        "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email.strip()},
-        "to": [{"email": to_email.strip()}],
-        "subject": subject,
-        "htmlContent": html_body
-    }
-    
-    headers = {
-        "accept": "application/json",
-        "api-key": api_key.strip(),
-        "content-type": "application/json",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-    }
-    
-    try:
-        req = urllib.request.Request(
-            url, 
-            data=json.dumps(payload).encode('utf-8'), 
-            headers=headers, 
-            method='POST'
-        )
-        with urllib.request.urlopen(req) as response:
-            if response.status in [200, 201]:
-                print(f"Email successfully sent to {to_email} via Brevo HTTP API!")
-                return True
-    except urllib.error.HTTPError as e:
-        error_response = e.read().decode('utf-8')
-        print(f"Brevo HTTP Error {e.code}: {error_response}")
-    except Exception as e:
-        print(f"Error sending email via Brevo HTTP API: {e}")
-    return False
+    # 1. Primary Method: Gmail SSL SMTP
+    if gmail_app_password:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"Sanjivani Dairy Farm <{sender_email.strip()}>"
+            msg["To"] = to_email.strip()
+            msg.attach(MIMEText(html_body, "html"))
 
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+                server.login(sender_email.strip(), gmail_app_password.strip())
+                server.sendmail(sender_email.strip(), to_email.strip(), msg.as_string())
+            print(f"Email successfully sent to {to_email} via Gmail SMTP!")
+            return True
+        except Exception as e:
+            print(f"Gmail SMTP Error: {e}")
+
+    # 2. Secondary Method: Brevo HTTP API
+    api_key = os.environ.get("BREVO_API_KEY")
+    if api_key:
+        url = "https://api.brevo.com/v3/smtp/email"
+        payload = {
+            "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email.strip()},
+            "to": [{"email": to_email.strip()}],
+            "subject": subject,
+            "htmlContent": html_body
+        }
+        
+        headers = {
+            "accept": "application/json",
+            "api-key": api_key.strip(),
+            "content-type": "application/json",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        
+        try:
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(payload).encode('utf-8'), 
+                headers=headers, 
+                method='POST'
+            )
+            with urllib.request.urlopen(req) as response:
+                if response.status in [200, 201]:
+                    print(f"Email successfully sent to {to_email} via Brevo HTTP API!")
+                    return True
+        except urllib.error.HTTPError as e:
+            error_response = e.read().decode('utf-8')
+            print(f"Brevo HTTP Error {e.code}: {error_response}")
+        except Exception as e:
+            print(f"Error sending email via Brevo HTTP API: {e}")
+
+    print("ERROR: Neither Gmail SMTP nor Brevo API sent the email successfully.")
+    return False
 
 def is_email(value):
     return isinstance(value, str) and "@" in value and "." in value.rsplit("@", 1)[-1]
@@ -275,7 +296,7 @@ def send_email_otp():
         return jsonify({
             "success": False,
             "otp": "123456",
-            "message": "Failed to send email via Brevo HTTP API. Fallback demo code: 123456"
+            "message": "Failed to send email. Fallback demo code: 123456"
         }), 500
 
 
