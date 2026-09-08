@@ -123,8 +123,8 @@ def send_email_via_http(to_email, subject, html_body):
     api_key = os.environ.get("BREVO_API_KEY")
     sender_email = os.environ.get("SENDER_EMAIL") or "sanjivanidairyfarm40@gmail.com"
     
-    if not api_key or not sender_email or not to_email:
-        print("Brevo API key, SENDER_EMAIL, or recipient email missing.")
+    if not api_key:
+        print("ERROR: BREVO_API_KEY is not configured in environment variables.")
         return False
         
     url = "https://api.brevo.com/v3/smtp/email"
@@ -138,7 +138,8 @@ def send_email_via_http(to_email, subject, html_body):
     headers = {
         "accept": "application/json",
         "api-key": api_key.strip(),
-        "content-type": "application/json"
+        "content-type": "application/json",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     }
     
     try:
@@ -158,6 +159,7 @@ def send_email_via_http(to_email, subject, html_body):
     except Exception as e:
         print(f"Error sending email via Brevo HTTP API: {e}")
     return False
+
 
 def is_email(value):
     return isinstance(value, str) and "@" in value and "." in value.rsplit("@", 1)[-1]
