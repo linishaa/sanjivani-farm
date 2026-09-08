@@ -28,9 +28,9 @@ function Login() {
 
   // Automatically switch between local Flask backend and Render production URL
   const API_BASE_URL =
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://127.0.0.1:5000'
-      : 'https://sanjivani-farmbackend.onrender.com';
+  window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://127.0.0.1:5000'
+    : 'https://sanjivani-farm-backend.onrender.com';
 
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
