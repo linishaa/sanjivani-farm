@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import razorpay
 from urllib.parse import quote
 import urllib.request
+import urllib.error
 from flask import Flask, request, jsonify, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -29,7 +30,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 # --- ENVIRONMENT & CREDENTIALS ---
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL")
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL or "")
+OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL or "sanjivanidairyfarm40@gmail.com")
 
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "YOUR_TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "YOUR_TWILIO_AUTH_TOKEN")
@@ -120,7 +121,7 @@ def publish_web_notification(title, message, kind="info"):
 
 def send_email_via_http(to_email, subject, html_body):
     api_key = os.environ.get("BREVO_API_KEY")
-    sender_email = os.environ.get("SENDER_EMAIL")
+    sender_email = os.environ.get("SENDER_EMAIL") or "sanjivanidairyfarm40@gmail.com"
     
     if not api_key or not sender_email or not to_email:
         print("Brevo API key, SENDER_EMAIL, or recipient email missing.")
@@ -128,15 +129,15 @@ def send_email_via_http(to_email, subject, html_body):
         
     url = "https://api.brevo.com/v3/smtp/email"
     payload = {
-        "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email},
-        "to": [{"email": to_email}],
+        "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email.strip()},
+        "to": [{"email": to_email.strip()}],
         "subject": subject,
         "htmlContent": html_body
     }
     
     headers = {
         "accept": "application/json",
-        "api-key": api_key,
+        "api-key": api_key.strip(),
         "content-type": "application/json"
     }
     
@@ -149,7 +150,11 @@ def send_email_via_http(to_email, subject, html_body):
         )
         with urllib.request.urlopen(req) as response:
             if response.status in [200, 201]:
+                print(f"Email successfully sent to {to_email} via Brevo HTTP API!")
                 return True
+    except urllib.error.HTTPError as e:
+        error_response = e.read().decode('utf-8')
+        print(f"Brevo HTTP Error {e.code}: {error_response}")
     except Exception as e:
         print(f"Error sending email via Brevo HTTP API: {e}")
     return False
