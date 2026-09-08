@@ -36,6 +36,9 @@ GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL)
 
+# Set DEMO_OTP_ENABLED=true only for local/testing environments. Keep false in production.
+DEMO_OTP_ENABLED = os.environ.get("DEMO_OTP_ENABLED", "false").strip().lower() == "true"
+
 TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "YOUR_TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "YOUR_TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_NUMBER = os.environ.get("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
@@ -124,66 +127,148 @@ def publish_web_notification(title, message, kind="info"):
     return notification
 
 def send_email_via_http(to_email, subject, html_body):
-    sender_email = os.environ.get("SENDER_EMAIL") or "sanjivanidairyfarm40@gmail.com"
-    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD")
-    
-    # 1. Primary Method: Gmail SSL SMTP
-    if gmail_app_password:
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"Sanjivani Dairy Farm <{sender_email.strip()}>"
-            msg["To"] = to_email.strip()
-            msg.attach(MIMEText(html_body, "html"))
+    """
+    Send email using Brevo's HTTP API first.
 
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-                server.login(sender_email.strip(), gmail_app_password.strip())
-                server.sendmail(sender_email.strip(), to_email.strip(), msg.as_string())
-            print(f"Email successfully sent to {to_email} via Gmail SMTP!")
-            return True
-        except Exception as e:
-            print(f"Gmail SMTP Error: {e}")
+    IMPORTANT:
+    Render Free web services block outbound SMTP ports 25/465/587.
+    Brevo's HTTPS API uses port 443, so it works without SMTP access.
+    Gmail SMTP remains as a secondary fallback for paid/non-blocked hosting.
+    """
+    to_email = str(to_email or "").strip()
+    sender_email = os.environ.get("SENDER_EMAIL", "").strip()
+    brevo_api_key = os.environ.get("BREVO_API_KEY", "").strip()
+    brevo_sender_name = os.environ.get(
+        "BREVO_SENDER_NAME",
+        "Sanjivani Dairy Farm"
+    ).strip()
 
-    # 2. Secondary Method: Brevo HTTP API
-    api_key = os.environ.get("BREVO_API_KEY")
-    if api_key:
+    if not to_email:
+        print("Email error: recipient email is empty.")
+        return False
+
+    if not is_email(to_email):
+        print(f"Email error: invalid recipient email: {to_email}")
+        return False
+
+    # ---------------------------------------------------------
+    # 1. PRIMARY: BREVO HTTPS API
+    # ---------------------------------------------------------
+    # This is the recommended method for a Render Free web service.
+    if brevo_api_key and sender_email:
         url = "https://api.brevo.com/v3/smtp/email"
+
         payload = {
-            "sender": {"name": "Sanjivani Dairy Farm", "email": sender_email.strip()},
-            "to": [{"email": to_email.strip()}],
+            "sender": {
+                "name": brevo_sender_name,
+                "email": sender_email
+            },
+            "to": [
+                {
+                    "email": to_email
+                }
+            ],
             "subject": subject,
             "htmlContent": html_body
         }
-        
+
         headers = {
             "accept": "application/json",
-            "api-key": api_key.strip(),
-            "content-type": "application/json",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            "api-key": brevo_api_key,
+            "content-type": "application/json"
         }
-        
+
         try:
             req = urllib.request.Request(
-                url, 
-                data=json.dumps(payload).encode('utf-8'), 
-                headers=headers, 
-                method='POST'
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST"
             )
-            with urllib.request.urlopen(req) as response:
-                if response.status in [200, 201]:
-                    print(f"Email successfully sent to {to_email} via Brevo HTTP API!")
-                    return True
-        except urllib.error.HTTPError as e:
-            error_response = e.read().decode('utf-8')
-            print(f"Brevo HTTP Error {e.code}: {error_response}")
-        except Exception as e:
-            print(f"Error sending email via Brevo HTTP API: {e}")
 
-    print("ERROR: Neither Gmail SMTP nor Brevo API sent the email successfully.")
+            with urllib.request.urlopen(req, timeout=20) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+
+                if response.status in (200, 201, 202):
+                    print(f"Email successfully sent to {to_email} via Brevo HTTP API.")
+                    return True
+
+                print(
+                    f"Brevo returned unexpected HTTP status "
+                    f"{response.status}: {response_body}"
+                )
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8", errors="replace")
+            print(f"Brevo HTTP Error {e.code}: {error_body}")
+
+        except urllib.error.URLError as e:
+            print(f"Brevo connection error: {e}")
+
+        except Exception as e:
+            print(f"Brevo email error: {type(e).__name__}: {e}")
+
+    elif not brevo_api_key:
+        print("Brevo email is not configured: BREVO_API_KEY is missing.")
+    elif not sender_email:
+        print("Brevo email is not configured: SENDER_EMAIL is missing.")
+
+    # ---------------------------------------------------------
+    # 2. SECONDARY: GMAIL SMTP
+    # ---------------------------------------------------------
+    # Keep this fallback for paid Render/non-Render environments.
+    # Render Free blocks SMTP ports, so this is normally skipped/fails there.
+    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+
+    if sender_email and gmail_app_password:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"] = f"Sanjivani Dairy Farm <{sender_email}>"
+            msg["To"] = to_email
+            msg.attach(MIMEText(html_body, "html", "utf-8"))
+
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
+                server.login(sender_email, gmail_app_password)
+                server.sendmail(
+                    sender_email,
+                    to_email,
+                    msg.as_string()
+                )
+
+            print(f"Email successfully sent to {to_email} via Gmail SMTP.")
+            return True
+
+        except Exception as e:
+            print(f"Gmail SMTP Error: {type(e).__name__}: {e}")
+
+    elif not gmail_app_password:
+        print("Gmail SMTP is not configured: GMAIL_APP_PASSWORD is missing.")
+
+    print("ERROR: No configured email provider successfully sent the email.")
     return False
 
 def is_email(value):
     return isinstance(value, str) and "@" in value and "." in value.rsplit("@", 1)[-1]
+
+
+@app.route('/api/email-status', methods=['GET'])
+def email_status():
+    """
+    Safe email configuration diagnostic.
+    Never returns API keys or passwords.
+    """
+    sender_email = os.environ.get("SENDER_EMAIL", "").strip()
+    brevo_api_key = os.environ.get("BREVO_API_KEY", "").strip()
+    gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+
+    return jsonify({
+        "success": True,
+        "brevo_configured": bool(brevo_api_key and sender_email),
+        "gmail_smtp_configured": bool(gmail_app_password and sender_email),
+        "sender_email_configured": bool(sender_email),
+        "recommended_provider": "brevo_http_api"
+    }), 200
 
 
 # --- STATIC MEDIA SERVING ---
@@ -256,7 +341,7 @@ def register():
 @app.route('/api/login/email-otp', methods=['POST'])
 def send_email_otp():
     data = request.json or {}
-    email = data.get('email', '').strip()
+    email = data.get('email', '').strip().lower()
     phone = data.get('phone', '').strip()
     name = data.get('name', 'Customer').strip()
 
@@ -291,20 +376,37 @@ def send_email_otp():
     """
 
     if send_email_via_http(email, "Your Sanjivani Farm Verification Code", html_content):
-        return jsonify({"success": True, "otp": otp, "message": f"OTP sent to {email}"}), 200
-    else:
+        response = {
+            "success": True,
+            "message": f"OTP sent to {email}"
+        }
+
+        # Never expose a real OTP to the browser.
+        # This is only available when explicitly enabled for testing.
+        if DEMO_OTP_ENABLED:
+            response["test_otp"] = otp
+
+        return jsonify(response), 200
+
+    # Do not silently authenticate users with a hard-coded OTP in production.
+    if DEMO_OTP_ENABLED:
         return jsonify({
             "success": False,
-            "otp": "123456",
-            "message": "Failed to send email. Fallback demo code: 123456"
+            "test_otp": "123456",
+            "message": "Email delivery failed. Demo OTP is enabled for testing only."
         }), 500
+
+    return jsonify({
+        "success": False,
+        "message": "We could not send the verification email. Please try again later."
+    }), 502
 
 
 # --- 3. OTP VERIFICATION ENDPOINT ---
 @app.route('/api/login/verify-otp', methods=['POST'])
 def verify_otp():
     data = request.json or {}
-    identifier = data.get('email', '').strip() or data.get('phone', '').strip()
+    identifier = data.get('email', '').strip().lower() or data.get('phone', '').strip()
     otp_provided = str(data.get('otp', '')).strip()
 
     if not identifier or not otp_provided:
@@ -729,4 +831,4 @@ def get_user_orders():
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
