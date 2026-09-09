@@ -201,7 +201,7 @@ function Login() {
         const userObj = JSON.parse(savedUser);
 
         if (userObj.role === 'customer') {
-          navigate('/cart');
+          navigate('/');
         } else if (userObj.role === 'admin') {
           navigate('/admin');
         }
@@ -241,7 +241,7 @@ function Login() {
     );
 
     setTimeout(() => {
-      navigate('/cart');
+      navigate('/');
     }, 700);
   };
 
