@@ -34,6 +34,11 @@ function Checkout() {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // ---------------------------------------------------------
+  // SUCCESS POPUP STATE
+  // ---------------------------------------------------------
+  const [successPopup, setSuccessPopup] = useState(null);
+
+  // ---------------------------------------------------------
   // DELIVERY ADDRESS STATE
   // ---------------------------------------------------------
   const [street, setStreet] = useState('');
@@ -111,6 +116,51 @@ function Checkout() {
       acc + Number(item.price || 0) * Number(item.quantity || 1),
     0
   );
+
+  // ---------------------------------------------------------
+  // SUCCESS POPUP
+  // ---------------------------------------------------------
+  const showSuccessPopup = ({
+    type = 'payment',
+    title,
+    message,
+    orderId,
+    paymentId,
+    amount,
+  }) => {
+    setSuccessPopup({
+      type,
+      title,
+      message,
+      orderId,
+      paymentId,
+      amount,
+    });
+  };
+
+  // ---------------------------------------------------------
+  // CLOSE SUCCESS POPUP + GO TO ORDERS
+  // ---------------------------------------------------------
+  const closeSuccessPopup = () => {
+    setSuccessPopup(null);
+    navigate('/orders');
+  };
+
+  // ---------------------------------------------------------
+  // AUTO REDIRECT AFTER 3 SECONDS
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!successPopup) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setSuccessPopup(null);
+      navigate('/orders');
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [successPopup, navigate]);
 
   // ---------------------------------------------------------
   // DISTRICT AUTOCOMPLETE
@@ -328,6 +378,7 @@ function Checkout() {
   // ---------------------------------------------------------
   const selectPostOffice = (office) => {
     setPostOffice(office.Name);
+
     setVillage((currentVillage) =>
       currentVillage.trim() ? currentVillage : office.Name
     );
@@ -515,11 +566,15 @@ function Checkout() {
         // Clear cart only after successful backend order
         clearCart?.();
 
-        alert(
-          `Order ${codData.order_id} placed successfully. We sent the confirmation through the available notification channels.`
-        );
-
-        navigate('/orders');
+        // Show success popup
+        showSuccessPopup({
+          type: 'cod',
+          title: 'Order Placed Successfully!',
+          message:
+            'Your Cash on Delivery order has been confirmed. A confirmation email has been sent to your registered email address.',
+          orderId: codData.order_id,
+          amount: subtotal,
+        });
       } catch (error) {
         console.error('COD order error:', error);
 
@@ -684,11 +739,18 @@ function Checkout() {
               // backend payment verification.
               clearCart?.();
 
-              alert(
-                '🎉 Payment successful! Your order has been placed and confirmation notifications have been sent.'
-              );
-
-              navigate('/orders');
+              // Show professional success popup
+              showSuccessPopup({
+                type: 'payment',
+                title: 'Payment Successful!',
+                message:
+                  'Your payment has been verified and your order is confirmed. A confirmation email has been sent to your registered email address.',
+                orderId:
+                  response.razorpay_order_id,
+                paymentId:
+                  response.razorpay_payment_id,
+                amount: subtotal,
+              });
             } else {
               console.error(
                 'Payment verification failed:',
@@ -746,531 +808,638 @@ function Checkout() {
   // UI
   // ---------------------------------------------------------
   return (
-    <div className="bg-[#f0fdf4] min-h-screen py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto bg-white p-8 rounded-3xl border border-emerald-900/10 shadow-xl space-y-6">
+    <>
+      {/* =====================================================
+          SUCCESS POPUP
+      ===================================================== */}
+      {successPopup && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
 
-        {/* ---------------------------------------------------
-            HEADER
-        --------------------------------------------------- */}
-        <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-          <h1 className="text-2xl font-black text-gray-900">
-            Checkout
-          </h1>
+          {/* BACKDROP */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-          <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
-            Sanjivani Farm
-          </span>
-        </div>
+          {/* POPUP CARD */}
+          <div className="relative w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl border border-emerald-100">
 
-        {/* ---------------------------------------------------
-            CURRENT USER
-        --------------------------------------------------- */}
-        <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/60 text-xs text-gray-700 flex items-center justify-between gap-4">
-          <div>
-            Ordering as:{' '}
-            <span className="font-bold text-emerald-900">
-              {currentUser.name || 'Customer'}
-            </span>
-          </div>
+            {/* TOP GRADIENT */}
+            <div className="h-2 bg-gradient-to-r from-emerald-500 via-green-400 to-lime-400" />
 
-          <div className="text-emerald-700 font-semibold text-right break-all">
-            {currentUser.email ||
-              currentUser.phone ||
-              ''}
-          </div>
-        </div>
+            <div className="p-7 text-center">
 
-        {/* ---------------------------------------------------
-            FORM
-        --------------------------------------------------- */}
-        <form
-          onSubmit={handlePlaceOrder}
-          className="space-y-6"
-        >
-
-          {/* =================================================
-              DELIVERY ADDRESS
-          ================================================= */}
-          <div className="space-y-4">
-
-            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
-              Delivery Address Details
-            </h2>
-
-            {/* ---------------------------------------------
-                HOUSE / STREET
-            --------------------------------------------- */}
-            <div>
-              <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                House No. / Street / Landmark{' '}
-                <span className="font-medium text-gray-400">
-                  (Optional)
-                </span>
-              </label>
-
-              <input
-                type="text"
-                placeholder="e.g. House No. 12, Main Road, Near Milk Hub"
-                value={street}
-                onChange={(e) => {
-                  setStreet(e.target.value);
-                  setAddressError('');
-                }}
-                autoComplete="street-address"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
-              />
-            </div>
-
-            {/* ---------------------------------------------
-                VILLAGE / CITY
-            --------------------------------------------- */}
-            <div>
-              <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                Village / Town / City *
-              </label>
-
-              <input
-                type="text"
-                required
-                placeholder="Enter village, town or city"
-                value={village}
-                onChange={(e) => {
-                  setVillage(e.target.value);
-                  setAddressError('');
-                }}
-                autoComplete="address-level2"
-                className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
-              />
-
-              <p className="text-[10px] text-gray-400 mt-1">
-                Enter your local area, village or town.
-              </p>
-            </div>
-
-            {/* ---------------------------------------------
-                DISTRICT + STATE
-            --------------------------------------------- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              {/* DISTRICT */}
-              <div className="relative">
-                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                  District *
-                </label>
-
-                <input
-                  type="text"
-                  required
-                  placeholder="Type your district"
-                  value={district}
-                  onChange={handleDistrictChange}
-                  onFocus={() => {
-                    if (district.trim()) {
-                      const filtered =
-                        KERALA_DISTRICTS.filter(
-                          (item) =>
-                            item
-                              .toLowerCase()
-                              .startsWith(
-                                district
-                                  .trim()
-                                  .toLowerCase()
-                              )
-                        );
-
-                      setDistrictSuggestions(
-                        filtered
-                      );
-
-                      setShowDistrictSuggestions(
-                        filtered.length > 0
-                      );
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      setShowDistrictSuggestions(
-                        false
-                      );
-                    }, 150);
-                  }}
-                  autoComplete="off"
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
-                />
-
-                {/* DISTRICT SUGGESTIONS */}
-                {showDistrictSuggestions &&
-                  districtSuggestions.length > 0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
-
-                      {districtSuggestions.map(
-                        (item) => (
-                          <button
-                            key={item}
-                            type="button"
-                            onMouseDown={() =>
-                              selectDistrict(
-                                item
-                              )
-                            }
-                            className="w-full text-left px-4 py-3 text-xs font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
-                          >
-                            {item}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  )}
-              </div>
-
-              {/* STATE */}
-              <div>
-                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                  State *
-                </label>
-
-                <select
-                  value={stateName}
-                  onChange={(e) => {
-                    setStateName(e.target.value);
-                    setAddressError('');
-                  }}
-                  required
-                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
-                >
-                  <option value="Kerala">
-                    Kerala
-                  </option>
-                </select>
-
-                <p className="text-[10px] text-emerald-600 font-semibold mt-1">
-                  Currently delivering within Kerala
-                </p>
-              </div>
-            </div>
-
-            {/* ---------------------------------------------
-                PIN CODE + POST OFFICE
-            --------------------------------------------- */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              {/* PINCODE */}
-              <div>
-                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                  PIN Code *
-                </label>
-
-                <div className="relative">
-                  <input
-                    type="text"
-                    required
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="e.g. 680001"
-                    value={pincode}
-                    onChange={handlePincodeChange}
-                    autoComplete="postal-code"
-                    className={`w-full px-4 py-3 rounded-2xl border text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent ${
-                      pincodeStatus ===
-                      'success'
-                        ? 'border-emerald-500 focus:ring-emerald-500'
-                        : pincodeStatus ===
-                          'error'
-                        ? 'border-red-400 focus:ring-red-400'
-                        : 'border-gray-200 focus:ring-[#16a34a]'
-                    }`}
-                  />
-
-                  {/* LOADING */}
-                  {pincodeStatus ===
-                    'loading' && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                      Checking...
-                    </span>
-                  )}
-
-                  {/* SUCCESS */}
-                  {pincodeStatus ===
-                    'success' && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-600 font-black">
-                      ✓
-                    </span>
-                  )}
+              {/* SUCCESS ICON */}
+              <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 shadow-lg shadow-emerald-500/30">
+                  <span className="text-3xl text-white font-black">
+                    ✓
+                  </span>
                 </div>
+              </div>
 
-                {/* PIN MESSAGE */}
-                {pincodeMessage && (
-                  <p
-                    className={`text-[10px] font-semibold mt-1 ${
-                      pincodeStatus ===
-                      'success'
-                        ? 'text-emerald-600'
-                        : pincodeStatus ===
-                          'error'
-                        ? 'text-red-500'
-                        : 'text-gray-500'
-                    }`}
-                  >
-                    {pincodeStatus ===
-                      'success'
-                      ? '✓ '
-                      : pincodeStatus ===
-                        'error'
-                      ? '✕ '
-                      : ''}
-                    {pincodeMessage}
-                  </p>
+              {/* TITLE */}
+              <h2 className="text-2xl font-black text-gray-900">
+                {successPopup.title}
+              </h2>
+
+              {/* MESSAGE */}
+              <p className="mt-3 text-sm leading-relaxed text-gray-500">
+                {successPopup.message}
+              </p>
+
+              {/* ORDER DETAILS */}
+              <div className="mt-6 rounded-2xl bg-emerald-50 border border-emerald-100 p-4 text-left space-y-3">
+
+                {/* ORDER ID */}
+                {successPopup.orderId && (
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="font-semibold text-gray-500">
+                      Order ID
+                    </span>
+
+                    <span className="font-black text-gray-900 text-right break-all">
+                      {successPopup.orderId}
+                    </span>
+                  </div>
+                )}
+
+                {/* PAYMENT ID */}
+                {successPopup.paymentId && (
+                  <div className="flex justify-between gap-4 text-xs">
+                    <span className="font-semibold text-gray-500">
+                      Payment ID
+                    </span>
+
+                    <span className="font-black text-gray-900 text-right break-all">
+                      {successPopup.paymentId}
+                    </span>
+                  </div>
+                )}
+
+                {/* AMOUNT */}
+                {successPopup.amount !== undefined && (
+                  <div className="flex justify-between gap-4 pt-2 border-t border-emerald-100">
+                    <span className="font-bold text-gray-600">
+                      {successPopup.type === 'cod'
+                        ? 'Amount Due'
+                        : 'Amount Paid'}
+                    </span>
+
+                    <span className="text-lg font-black text-emerald-600">
+                      ₹
+                      {Number(
+                        successPopup.amount
+                      ).toFixed(0)}
+                    </span>
+                  </div>
                 )}
               </div>
 
-              {/* POST OFFICE */}
-              <div className="relative">
+              {/* EMAIL CONFIRMATION */}
+              <div className="mt-4 flex items-center justify-center gap-2 text-[11px] font-semibold text-emerald-700">
+                <span>✉️</span>
+                <span>
+                  Confirmation email sent
+                </span>
+              </div>
+
+              {/* OK BUTTON */}
+              <button
+                type="button"
+                onClick={closeSuccessPopup}
+                className="mt-6 w-full rounded-full bg-[#16a34a] py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-emerald-900/20 transition-all hover:bg-[#15803d] hover:scale-[1.01]"
+              >
+                OK — View My Orders
+              </button>
+
+              {/* AUTO REDIRECT MESSAGE */}
+              <p className="mt-3 text-[10px] font-medium text-gray-400">
+                Redirecting to My Orders automatically...
+              </p>
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          CHECKOUT PAGE
+      ===================================================== */}
+      <div className="bg-[#f0fdf4] min-h-screen py-12 px-4 sm:px-6 lg:px-8">
+
+        <div className="max-w-3xl mx-auto bg-white p-8 rounded-3xl border border-emerald-900/10 shadow-xl space-y-6">
+
+          {/* -------------------------------------------------
+              HEADER
+          ------------------------------------------------- */}
+          <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+            <h1 className="text-2xl font-black text-gray-900">
+              Checkout
+            </h1>
+
+            <span className="bg-emerald-100 text-emerald-800 text-[10px] font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">
+              Sanjivani Farm
+            </span>
+          </div>
+
+          {/* -------------------------------------------------
+              CURRENT USER
+          ------------------------------------------------- */}
+          <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200/60 text-xs text-gray-700 flex items-center justify-between gap-4">
+            <div>
+              Ordering as:{' '}
+              <span className="font-bold text-emerald-900">
+                {currentUser.name || 'Customer'}
+              </span>
+            </div>
+
+            <div className="text-emerald-700 font-semibold text-right break-all">
+              {currentUser.email ||
+                currentUser.phone ||
+                ''}
+            </div>
+          </div>
+
+          {/* -------------------------------------------------
+              FORM
+          ------------------------------------------------- */}
+          <form
+            onSubmit={handlePlaceOrder}
+            className="space-y-6"
+          >
+
+            {/* =================================================
+                DELIVERY ADDRESS
+            ================================================= */}
+            <div className="space-y-4">
+
+              <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
+                Delivery Address Details
+              </h2>
+
+              {/* HOUSE / STREET */}
+              <div>
                 <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
-                  Post Office *
+                  House No. / Street / Landmark{' '}
+                  <span className="font-medium text-gray-400">
+                    (Optional)
+                  </span>
+                </label>
+
+                <input
+                  type="text"
+                  placeholder="e.g. House No. 12, Main Road, Near Milk Hub"
+                  value={street}
+                  onChange={(e) => {
+                    setStreet(e.target.value);
+                    setAddressError('');
+                  }}
+                  autoComplete="street-address"
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+              </div>
+
+              {/* VILLAGE / CITY */}
+              <div>
+                <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                  Village / Town / City *
                 </label>
 
                 <input
                   type="text"
                   required
-                  readOnly={
-                    postOfficeSuggestions.length ===
-                    0
-                  }
-                  placeholder={
-                    pincodeStatus ===
-                    'loading'
-                      ? 'Checking PIN...'
-                      : 'Select Post Office'
-                  }
-                  value={postOffice}
+                  placeholder="Enter village, town or city"
+                  value={village}
                   onChange={(e) => {
-                    setPostOffice(
-                      e.target.value
-                    );
-                    setShowPostOfficeSuggestions(
-                      true
-                    );
+                    setVillage(e.target.value);
+                    setAddressError('');
                   }}
-                  onFocus={() => {
-                    if (
-                      postOfficeSuggestions.length >
+                  autoComplete="address-level2"
+                  className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                />
+
+                <p className="text-[10px] text-gray-400 mt-1">
+                  Enter your local area, village or town.
+                </p>
+              </div>
+
+              {/* DISTRICT + STATE */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {/* DISTRICT */}
+                <div className="relative">
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                    District *
+                  </label>
+
+                  <input
+                    type="text"
+                    required
+                    placeholder="Type your district"
+                    value={district}
+                    onChange={handleDistrictChange}
+                    onFocus={() => {
+                      if (district.trim()) {
+                        const filtered =
+                          KERALA_DISTRICTS.filter(
+                            (item) =>
+                              item
+                                .toLowerCase()
+                                .startsWith(
+                                  district
+                                    .trim()
+                                    .toLowerCase()
+                                )
+                          );
+
+                        setDistrictSuggestions(
+                          filtered
+                        );
+
+                        setShowDistrictSuggestions(
+                          filtered.length > 0
+                        );
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowDistrictSuggestions(
+                          false
+                        );
+                      }, 150);
+                    }}
+                    autoComplete="off"
+                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                  />
+
+                  {/* DISTRICT SUGGESTIONS */}
+                  {showDistrictSuggestions &&
+                    districtSuggestions.length > 0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden">
+
+                        {districtSuggestions.map(
+                          (item) => (
+                            <button
+                              key={item}
+                              type="button"
+                              onMouseDown={() =>
+                                selectDistrict(
+                                  item
+                                )
+                              }
+                              className="w-full text-left px-4 py-3 text-xs font-semibold text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 transition-colors"
+                            >
+                              {item}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+                </div>
+
+                {/* STATE */}
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                    State *
+                  </label>
+
+                  <select
+                    value={stateName}
+                    onChange={(e) => {
+                      setStateName(e.target.value);
+                      setAddressError('');
+                    }}
+                    required
+                    className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent"
+                  >
+                    <option value="Kerala">
+                      Kerala
+                    </option>
+                  </select>
+
+                  <p className="text-[10px] text-emerald-600 font-semibold mt-1">
+                    Currently delivering within Kerala
+                  </p>
+                </div>
+              </div>
+
+              {/* PIN CODE + POST OFFICE */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                {/* PINCODE */}
+                <div>
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                    PIN Code *
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      required
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="e.g. 680001"
+                      value={pincode}
+                      onChange={handlePincodeChange}
+                      autoComplete="postal-code"
+                      className={`w-full px-4 py-3 rounded-2xl border text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:border-transparent ${
+                        pincodeStatus ===
+                        'success'
+                          ? 'border-emerald-500 focus:ring-emerald-500'
+                          : pincodeStatus ===
+                            'error'
+                          ? 'border-red-400 focus:ring-red-400'
+                          : 'border-gray-200 focus:ring-[#16a34a]'
+                      }`}
+                    />
+
+                    {/* LOADING */}
+                    {pincodeStatus ===
+                      'loading' && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                        Checking...
+                      </span>
+                    )}
+
+                    {/* SUCCESS */}
+                    {pincodeStatus ===
+                      'success' && (
+                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-600 font-black">
+                        ✓
+                      </span>
+                    )}
+                  </div>
+
+                  {/* PIN MESSAGE */}
+                  {pincodeMessage && (
+                    <p
+                      className={`text-[10px] font-semibold mt-1 ${
+                        pincodeStatus ===
+                        'success'
+                          ? 'text-emerald-600'
+                          : pincodeStatus ===
+                            'error'
+                          ? 'text-red-500'
+                          : 'text-gray-500'
+                      }`}
+                    >
+                      {pincodeStatus ===
+                        'success'
+                        ? '✓ '
+                        : pincodeStatus ===
+                          'error'
+                        ? '✕ '
+                        : ''}
+                      {pincodeMessage}
+                    </p>
+                  )}
+                </div>
+
+                {/* POST OFFICE */}
+                <div className="relative">
+                  <label className="block text-[11px] font-extrabold uppercase text-gray-600 mb-1">
+                    Post Office *
+                  </label>
+
+                  <input
+                    type="text"
+                    required
+                    readOnly={
+                      postOfficeSuggestions.length ===
                       0
-                    ) {
+                    }
+                    placeholder={
+                      pincodeStatus ===
+                      'loading'
+                        ? 'Checking PIN...'
+                        : 'Select Post Office'
+                    }
+                    value={postOffice}
+                    onChange={(e) => {
+                      setPostOffice(
+                        e.target.value
+                      );
                       setShowPostOfficeSuggestions(
                         true
                       );
-                    }
-                  }}
-                  onBlur={() => {
-                    setTimeout(() => {
-                      setShowPostOfficeSuggestions(
-                        false
-                      );
-                    }, 150);
-                  }}
-                  autoComplete="off"
-                  className={`w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent ${
-                    !postOffice &&
-                    pincodeStatus ===
-                      'success'
-                      ? 'bg-emerald-50'
-                      : 'bg-white'
-                  }`}
-                />
+                    }}
+                    onFocus={() => {
+                      if (
+                        postOfficeSuggestions.length >
+                        0
+                      ) {
+                        setShowPostOfficeSuggestions(
+                          true
+                        );
+                      }
+                    }}
+                    onBlur={() => {
+                      setTimeout(() => {
+                        setShowPostOfficeSuggestions(
+                          false
+                        );
+                      }, 150);
+                    }}
+                    autoComplete="off"
+                    className={`w-full px-4 py-3 rounded-2xl border border-gray-200 text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#16a34a] focus:border-transparent ${
+                      !postOffice &&
+                      pincodeStatus ===
+                        'success'
+                        ? 'bg-emerald-50'
+                        : 'bg-white'
+                    }`}
+                  />
 
-                {/* POST OFFICE SUGGESTIONS */}
-                {showPostOfficeSuggestions &&
-                  postOfficeSuggestions.length >
-                    0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
+                  {/* POST OFFICE SUGGESTIONS */}
+                  {showPostOfficeSuggestions &&
+                    postOfficeSuggestions.length >
+                      0 && (
+                      <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden max-h-52 overflow-y-auto">
 
-                      {postOfficeSuggestions.map(
-                        (office, index) => (
-                          <button
-                            key={`${office.Name}-${index}`}
-                            type="button"
-                            onMouseDown={() =>
-                              selectPostOffice(
-                                office
-                              )
-                            }
-                            className="w-full text-left px-4 py-3 border-b last:border-b-0 border-gray-100 hover:bg-emerald-50 transition-colors"
-                          >
-                            <span className="block text-xs font-bold text-gray-800">
-                              {office.Name}
-                            </span>
+                        {postOfficeSuggestions.map(
+                          (office, index) => (
+                            <button
+                              key={`${office.Name}-${index}`}
+                              type="button"
+                              onMouseDown={() =>
+                                selectPostOffice(
+                                  office
+                                )
+                              }
+                              className="w-full text-left px-4 py-3 border-b last:border-b-0 border-gray-100 hover:bg-emerald-50 transition-colors"
+                            >
+                              <span className="block text-xs font-bold text-gray-800">
+                                {office.Name}
+                              </span>
 
-                            <span className="block text-[10px] text-gray-400 mt-0.5">
-                              {office.Block
-                                ? `${office.Block}, `
-                                : ''}
-                              {office.District ||
-                                district}
-                            </span>
-                          </button>
-                        )
-                      )}
-                    </div>
-                  )}
+                              <span className="block text-[10px] text-gray-400 mt-0.5">
+                                {office.Block
+                                  ? `${office.Block}, `
+                                  : ''}
+                                {office.District ||
+                                  district}
+                              </span>
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
 
-                {pincodeStatus ===
-                  'success' &&
-                  postOfficeSuggestions.length >
-                    1 &&
-                  !postOffice && (
-                    <p className="text-[10px] text-amber-600 font-semibold mt-1">
-                      Please select your Post Office.
-                    </p>
-                  )}
+                  {pincodeStatus ===
+                    'success' &&
+                    postOfficeSuggestions.length >
+                      1 &&
+                    !postOffice && (
+                      <p className="text-[10px] text-amber-600 font-semibold mt-1">
+                        Please select your Post Office.
+                      </p>
+                    )}
+                </div>
               </div>
+
+              {/* ADDRESS ERROR */}
+              {addressError && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl">
+                  <span className="text-sm">
+                    ⚠️
+                  </span>
+
+                  <p className="text-[11px] font-semibold leading-relaxed">
+                    {addressError}
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* ---------------------------------------------
-                ADDRESS ERROR
-            --------------------------------------------- */}
-            {addressError && (
-              <div className="flex items-start gap-2 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-2xl">
-                <span className="text-sm">
-                  ⚠️
-                </span>
+            {/* =================================================
+                PAYMENT METHOD
+            ================================================= */}
+            <div className="space-y-3 pt-2">
 
-                <p className="text-[11px] font-semibold leading-relaxed">
-                  {addressError}
-                </p>
-              </div>
-            )}
-          </div>
+              <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
+                Payment Method
+              </h2>
 
-          {/* =================================================
-              PAYMENT METHOD
-          ================================================= */}
-          <div className="space-y-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-            <h2 className="text-xs font-black uppercase tracking-wider text-emerald-800 border-b border-emerald-100 pb-1">
-              Payment Method
-            </h2>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              {/* ONLINE PAYMENT */}
-              <div
-                onClick={() =>
-                  !isProcessing &&
-                  setPaymentMethod(
-                    'online'
-                  )
-                }
-                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
-                  paymentMethod ===
-                  'online'
-                    ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                } ${
-                  isProcessing
-                    ? 'opacity-70 cursor-not-allowed'
-                    : ''
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="radio"
-                    checked={
-                      paymentMethod ===
+                {/* ONLINE PAYMENT */}
+                <div
+                  onClick={() =>
+                    !isProcessing &&
+                    setPaymentMethod(
                       'online'
-                    }
-                    readOnly
-                    className="accent-[#16a34a] w-4 h-4"
-                  />
+                    )
+                  }
+                  className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
+                    paymentMethod ===
+                    'online'
+                      ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  } ${
+                    isProcessing
+                      ? 'opacity-70 cursor-not-allowed'
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      checked={
+                        paymentMethod ===
+                        'online'
+                      }
+                      readOnly
+                      className="accent-[#16a34a] w-4 h-4"
+                    />
 
-                  <span className="text-sm font-bold text-gray-900">
-                    Pay Online (Razorpay)
-                  </span>
+                    <span className="text-sm font-bold text-gray-900">
+                      Pay Online (Razorpay)
+                    </span>
+                  </div>
+
+                  <p className="text-xs font-medium text-gray-500 mt-1 ml-7">
+                    UPI, GPay, Cards, Netbanking
+                  </p>
                 </div>
 
-                <p className="text-xs font-medium text-gray-500 mt-1 ml-7">
-                  UPI, GPay, Cards, Netbanking
-                </p>
-              </div>
-
-              {/* COD */}
-              <div
-                onClick={() =>
-                  !isProcessing &&
-                  setPaymentMethod(
-                    'cod'
-                  )
-                }
-                className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
-                  paymentMethod ===
-                  'cod'
-                    ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
-                    : 'border-gray-200 hover:border-gray-300 bg-white'
-                } ${
-                  isProcessing
-                    ? 'opacity-70 cursor-not-allowed'
-                    : ''
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <input
-                    type="radio"
-                    checked={
-                      paymentMethod ===
+                {/* COD */}
+                <div
+                  onClick={() =>
+                    !isProcessing &&
+                    setPaymentMethod(
                       'cod'
-                    }
-                    readOnly
-                    className="accent-[#16a34a] w-4 h-4"
-                  />
+                    )
+                  }
+                  className={`p-4 border rounded-2xl cursor-pointer transition-all flex flex-col justify-center ${
+                    paymentMethod ===
+                    'cod'
+                      ? 'border-[#16a34a] bg-emerald-500/10 ring-2 ring-[#16a34a]'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  } ${
+                    isProcessing
+                      ? 'opacity-70 cursor-not-allowed'
+                      : ''
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="radio"
+                      checked={
+                        paymentMethod ===
+                        'cod'
+                      }
+                      readOnly
+                      className="accent-[#16a34a] w-4 h-4"
+                    />
 
-                  <span className="text-sm font-bold text-gray-900">
-                    Cash on Delivery
-                  </span>
+                    <span className="text-sm font-bold text-gray-900">
+                      Cash on Delivery
+                    </span>
+                  </div>
+
+                  <p className="text-xs font-medium text-gray-500 mt-1 ml-7">
+                    Pay via cash or UPI on delivery
+                  </p>
                 </div>
-
-                <p className="text-xs font-medium text-gray-500 mt-1 ml-7">
-                  Pay via cash or UPI on delivery
-                </p>
               </div>
             </div>
-          </div>
 
-          {/* =================================================
-              TOTAL
-          ================================================= */}
-          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-            <span className="text-sm font-black text-gray-900">
-              Total Amount:
-            </span>
+            {/* =================================================
+                TOTAL
+            ================================================= */}
+            <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+              <span className="text-sm font-black text-gray-900">
+                Total Amount:
+              </span>
 
-            <span className="text-xl font-black text-[#16a34a]">
-              ₹{subtotal.toFixed(0)}
-            </span>
-          </div>
+              <span className="text-xl font-black text-[#16a34a]">
+                ₹{subtotal.toFixed(0)}
+              </span>
+            </div>
 
-          {/* =================================================
-              SUBMIT BUTTON
-          ================================================= */}
-          <button
-            type="submit"
-            disabled={isProcessing}
-            className="w-full py-4 bg-[#16a34a] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#15803d] transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isProcessing
-              ? 'Processing...'
-              : paymentMethod ===
-                'online'
-              ? 'Pay Now via Razorpay'
-              : 'Confirm Order (COD)'}
-          </button>
+            {/* =================================================
+                SUBMIT BUTTON
+            ================================================= */}
+            <button
+              type="submit"
+              disabled={isProcessing}
+              className="w-full py-4 bg-[#16a34a] text-white text-xs font-black uppercase tracking-wider rounded-full hover:bg-[#15803d] transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isProcessing
+                ? 'Processing...'
+                : paymentMethod ===
+                  'online'
+                ? 'Pay Now via Razorpay'
+                : 'Confirm Order (COD)'}
+            </button>
 
-          {/* SECURITY / DELIVERY NOTE */}
-          <p className="text-center text-[10px] text-gray-400 font-medium">
-            Your delivery details are verified before
-            placing the order.
-          </p>
-        </form>
+            {/* SECURITY / DELIVERY NOTE */}
+            <p className="text-center text-[10px] text-gray-400 font-medium">
+              Your delivery details are verified before
+              placing the order.
+            </p>
+          </form>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
