@@ -112,6 +112,8 @@ function formatDate(value) {
       day: "2-digit",
       month: "short",
       year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   } catch {
     return String(value);
@@ -280,7 +282,8 @@ function StatusBadge({ status }) {
     className = "success";
   } else if (
     normalized.includes("pending") ||
-    normalized.includes("processing")
+    normalized.includes("processing") ||
+    normalized.includes("placed")
   ) {
     className = "warning";
   } else if (
@@ -292,7 +295,10 @@ function StatusBadge({ status }) {
   }
 
   return (
-    <span className={`admin-status-badge ${className}`}>
+    <span 
+      className={`admin-status-badge ${className}`}
+      title={`Status: ${status || "Unknown"}`}
+    >
       {status || "Unknown"}
     </span>
   );
@@ -381,7 +387,7 @@ export default function AdminDashboard() {
 
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // --- FETCH FUNCTIONS (Moved up to fix hoisting issue) ---
+  // --- FETCH FUNCTIONS ---
 
   const fetchBackendUsers = useCallback(async () => {
     setCustomersLoading(true);
@@ -401,15 +407,12 @@ export default function AdminDashboard() {
       }
 
       const users = normalizeUsers(data?.users || []);
-
-      // API is primary; set even if empty
       setRegisteredUsers(users);
     } catch (error) {
       console.error("[AdminDashboard] Admin customer fetch error:", error);
       setCustomersError(
         error.message || "Failed to fetch customers."
       );
-      // Fallback: keep existing registeredUsers (from localStorage/orders)
     } finally {
       setCustomersLoading(false);
     }
@@ -440,8 +443,6 @@ export default function AdminDashboard() {
       setBackendOrders([...receivedOrders].reverse());
     } catch (error) {
       console.error("[AdminDashboard] Admin order fetch error:", error);
-
-      // Keep dashboard usable if backend endpoint is unavailable
       setBackendOrders([]);
     } finally {
       setOrdersLoading(false);
@@ -474,7 +475,6 @@ export default function AdminDashboard() {
         );
       }
 
-      // Update local state
       setBackendOrders((current) =>
         current.map((order, index) => {
           if (getOrderId(order, index) === orderId) {
@@ -501,7 +501,6 @@ export default function AdminDashboard() {
 
   // --- EFFECTS ---
 
-  // Load fallback customers from localStorage / orders
   useEffect(() => {
     try {
       const users = getLocalUsers();
@@ -510,7 +509,6 @@ export default function AdminDashboard() {
         setRegisteredUsers(users);
       } else if (contextOrders.length > 0) {
         const unique = [];
-
         const seen = new Set();
 
         contextOrders.forEach((order) => {
@@ -553,7 +551,6 @@ export default function AdminDashboard() {
     }
   }, [contextOrders]);
 
-  // Persist inventory
   useEffect(() => {
     try {
       localStorage.setItem(
@@ -565,7 +562,6 @@ export default function AdminDashboard() {
     }
   }, [products]);
 
-  // Auto-dismiss notifications
   useEffect(() => {
     if (!notification) return;
 
@@ -576,13 +572,10 @@ export default function AdminDashboard() {
     return () => clearTimeout(timer);
   }, [notification]);
 
-  // Fetch backend data when needed
   useEffect(() => {
     if (activeTab === "orders" || activeTab === "overview") {
       fetchBackendOrders();
     }
-    // Fetch users on overview so the metric is correct immediately,
-    // and also on customers tab.
     if (activeTab === "customers" || activeTab === "overview") {
       fetchBackendUsers();
     }
@@ -734,9 +727,7 @@ export default function AdminDashboard() {
     }
 
     setImageFile(file);
-
     const previewUrl = URL.createObjectURL(file);
-
     setImagePreview(previewUrl);
   }
 
@@ -1021,13 +1012,25 @@ export default function AdminDashboard() {
             </p>
           </div>
 
-          <button
-            className="admin-primary-button"
-            onClick={() => changeTab("marketing")}
-          >
-            <span>✦</span>
-            Create Offer
-          </button>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              className="admin-secondary-button"
+              onClick={() => {
+                fetchBackendOrders();
+                fetchBackendUsers();
+              }}
+              disabled={ordersLoading || customersLoading}
+            >
+              {ordersLoading || customersLoading ? "Refreshing..." : "↻ Refresh Data"}
+            </button>
+            <button
+              className="admin-primary-button"
+              onClick={() => changeTab("marketing")}
+            >
+              <span>✦</span>
+              Create Offer
+            </button>
+          </div>
         </section>
 
         <section className="admin-metrics-grid">
@@ -1117,9 +1120,9 @@ export default function AdminDashboard() {
 
                         <td>
                           {formatDate(
+                            order?.created_at ||
                             order?.date ||
-                              order?.created_at ||
-                              order?.createdAt
+                            order?.createdAt
                           )}
                         </td>
 
@@ -1343,9 +1346,9 @@ export default function AdminDashboard() {
 
                       <td>
                         {formatDate(
+                          order?.created_at ||
                           order?.date ||
-                            order?.created_at ||
-                            order?.createdAt
+                          order?.createdAt
                         )}
                       </td>
 
