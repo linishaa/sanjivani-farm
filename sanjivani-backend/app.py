@@ -602,7 +602,8 @@ def verify_payment():
             "total_amount": total_amount,
             "address": address,
             "cart": cart,
-            "status": "Paid & Confirmed"
+            "status": "Paid & Confirmed",
+            "created_at": datetime.now(timezone.utc).isoformat()  # <--- ADDED TIMESTAMP
         }
         orders_db.append(new_order)
         save_json_file(ORDERS_FILE, orders_db)
@@ -676,7 +677,8 @@ def place_order_cod():
             "total_amount": total_amount,
             "address": address,
             "cart": cart,
-            "status": "Order Placed (COD)"
+            "status": "Order Placed (COD)",
+            "created_at": datetime.now(timezone.utc).isoformat()  # <--- ADDED TIMESTAMP
         }
         orders_db.append(new_order)
         save_json_file(ORDERS_FILE, orders_db)
@@ -762,6 +764,40 @@ def get_user_orders():
             filtered_orders.append(order)
 
     return jsonify({'success': True, 'orders': filtered_orders}), 200
+
+
+# --- 14. ADMIN UPDATE ORDER STATUS ---
+@app.route('/api/admin/update-order-status', methods=['POST'])
+def update_order_status():
+    try:
+        data = request.json or {}
+        order_id = data.get('order_id')
+        new_status = data.get('status')
+
+        if not order_id or not new_status:
+            return jsonify({"success": False, "message": "Order ID and status are required."}), 400
+
+        # Find and update the order
+        updated = False
+        for order in orders_db:
+            if str(order.get('order_id')) == str(order_id):
+                order['status'] = new_status
+                updated = True
+                break
+
+        if not updated:
+            return jsonify({"success": False, "message": "Order not found."}), 404
+
+        save_json_file(ORDERS_FILE, orders_db)
+
+        # Optional: You can add email/SMS notification logic here to alert the customer
+        # e.g., send_email_via_http(user_email, "Order Status Updated", f"Your order {order_id} is now {new_status}.")
+
+        return jsonify({"success": True, "message": f"Order status updated to {new_status}."}), 200
+
+    except Exception as e:
+        print(f"Error updating order status: {e}")
+        return jsonify({"success": False, "message": str(e)}), 500
 
 
 if __name__ == '__main__':
