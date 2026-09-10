@@ -46,6 +46,7 @@ const DEFAULT_PRODUCTS = [
     unit: "1 L",
     category: "Milk",
     status: "in-stock",
+    image: "",
   },
   {
     id: 2,
@@ -55,6 +56,7 @@ const DEFAULT_PRODUCTS = [
     unit: "500 g",
     category: "Dairy",
     status: "in-stock",
+    image: "",
   },
   {
     id: 3,
@@ -64,6 +66,7 @@ const DEFAULT_PRODUCTS = [
     unit: "250 g",
     category: "Dairy",
     status: "in-stock",
+    image: "",
   },
   {
     id: 4,
@@ -73,6 +76,7 @@ const DEFAULT_PRODUCTS = [
     unit: "200 g",
     category: "Dairy",
     status: "in-stock",
+    image: "",
   },
   {
     id: 5,
@@ -82,6 +86,7 @@ const DEFAULT_PRODUCTS = [
     unit: "500 ml",
     category: "Dairy",
     status: "in-stock",
+    image: "",
   },
 ];
 
@@ -146,7 +151,7 @@ function getOrderStatus(order) {
     order?.status ||
     order?.payment_status ||
     order?.order_status ||
-    "Processing"
+    "Pending"
   );
 }
 
@@ -316,6 +321,7 @@ export default function AdminDashboard() {
   const [backendOrders, setBackendOrders] = useState([]);
 
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [updatingOrderId, setUpdatingOrderId] = useState(null);
 
   const [products, setProducts] = useState(() => {
     try {
@@ -342,6 +348,9 @@ export default function AdminDashboard() {
     unit: "",
     category: "Dairy",
   });
+
+  const [newProductImageFile, setNewProductImageFile] = useState(null);
+  const [newProductImagePreview, setNewProductImagePreview] = useState("");
 
   const [offerTitle, setOfferTitle] = useState("");
 
@@ -438,6 +447,57 @@ export default function AdminDashboard() {
       setOrdersLoading(false);
     }
   }, []);
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    setUpdatingOrderId(orderId);
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/admin/update-order-status`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            order_id: orderId,
+            status: newStatus,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message || "Failed to update order status."
+        );
+      }
+
+      // Update local state
+      setBackendOrders((current) =>
+        current.map((order, index) => {
+          if (getOrderId(order, index) === orderId) {
+            return { ...order, status: newStatus };
+          }
+          return order;
+        })
+      );
+
+      showNotification(
+        "success",
+        `Order ${orderId} updated to ${newStatus}.`
+      );
+    } catch (error) {
+      console.error("Update order status error:", error);
+      showNotification(
+        "error",
+        error.message || "Failed to update order status."
+      );
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
 
   // --- EFFECTS ---
 
@@ -685,6 +745,45 @@ export default function AdminDashboard() {
     setImagePreview("");
   }
 
+  function handleNewProductImageChange(event) {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      showNotification(
+        "error",
+        "Please select a valid image file."
+      );
+
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      showNotification(
+        "error",
+        "Product image must be smaller than 2 MB."
+      );
+
+      event.target.value = "";
+      return;
+    }
+
+    setNewProductImageFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setNewProductImagePreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeNewProductImage() {
+    setNewProductImageFile(null);
+    setNewProductImagePreview("");
+  }
+
   function openBroadcastConfirmation(event) {
     event.preventDefault();
 
@@ -879,6 +978,7 @@ export default function AdminDashboard() {
         Number(newProduct.stock || 0) > 0
           ? "in-stock"
           : "out-of-stock",
+      image: newProductImagePreview || "",
     };
 
     setProducts((current) => [
@@ -893,6 +993,8 @@ export default function AdminDashboard() {
       unit: "",
       category: "Dairy",
     });
+
+    removeNewProductImage();
 
     showNotification(
       "success",
@@ -1256,9 +1358,21 @@ export default function AdminDashboard() {
                       </td>
 
                       <td>
-                        <StatusBadge
-                          status={getOrderStatus(order)}
-                        />
+                        {updatingOrderId === getOrderId(order, index) ? (
+                          <div className="admin-spinner small" />
+                        ) : (
+                          <select
+                            className={`admin-status-select ${getOrderStatus(order).toLowerCase().replace(/\s+/g, '-')}`}
+                            value={getOrderStatus(order)}
+                            onChange={(e) => updateOrderStatus(getOrderId(order, index), e.target.value)}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Processing">Processing</option>
+                            <option value="Shipped">Shipped</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -1691,6 +1805,44 @@ export default function AdminDashboard() {
                 </label>
               </div>
 
+              <div className="admin-upload-box" style={{ marginTop: '10px' }}>
+                {!newProductImagePreview ? (
+                  <label className="admin-upload-label">
+                    <div className="admin-upload-icon">
+                      ↑
+                    </div>
+
+                    <strong>
+                      Add Product Image
+                    </strong>
+
+                    <span>
+                      JPG, PNG or WEBP · Maximum 2 MB
+                    </span>
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleNewProductImageChange}
+                    />
+                  </label>
+                ) : (
+                  <div className="admin-upload-preview">
+                    <img
+                      src={newProductImagePreview}
+                      alt="Product preview"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={removeNewProductImage}
+                    >
+                      Remove image
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <button
                 type="submit"
                 className="admin-primary-button full"
@@ -1744,11 +1896,19 @@ export default function AdminDashboard() {
                       className="admin-inventory-item"
                       key={product.id}
                     >
-                      <div className="admin-product-icon">
-                        {product.name
-                          ?.charAt(0)
-                          ?.toUpperCase() || "P"}
-                      </div>
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="admin-product-image"
+                        />
+                      ) : (
+                        <div className="admin-product-icon">
+                          {product.name
+                            ?.charAt(0)
+                            ?.toUpperCase() || "P"}
+                        </div>
+                      )}
 
                       <div className="admin-product-details">
                         <h3>{product.name}</h3>
@@ -2676,6 +2836,38 @@ export default function AdminDashboard() {
           color: #6f7871;
         }
 
+        .admin-status-select {
+          appearance: none;
+          background: #edf6eb;
+          color: #527450;
+          border: 1px solid #c6dec2;
+          border-radius: 100px;
+          padding: 5px 25px 5px 10px;
+          font-size: 10px;
+          font-weight: 800;
+          cursor: pointer;
+          background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23527450' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+          background-repeat: no-repeat;
+          background-position: right 8px center;
+          background-size: 12px;
+        }
+
+        .admin-status-select.pending,
+        .admin-status-select.processing {
+          background-color: #fbf4df;
+          color: #8b6d2d;
+          border-color: #e8d8b3;
+          background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b6d2d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        }
+
+        .admin-status-select.cancelled,
+        .admin-status-select.failed {
+          background-color: #fbedeb;
+          color: #a15d55;
+          border-color: #e5c5c2;
+          background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a15d55' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        }
+
         .admin-stock-summary {
           padding: 2px 22px 18px;
         }
@@ -3039,6 +3231,14 @@ export default function AdminDashboard() {
           font-size: 12px;
           font-weight: 800;
           color: #536451;
+        }
+
+        .admin-product-image {
+          width: 36px;
+          height: 36px;
+          border-radius: 10px;
+          object-fit: cover;
+          background: #eff3ec;
         }
 
         .admin-product-details {
