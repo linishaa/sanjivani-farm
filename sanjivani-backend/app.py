@@ -15,7 +15,6 @@ from flask import Flask, request, jsonify, send_from_directory, Response, stream
 from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from twilio.rest import Client
 from dotenv import load_dotenv
 
 # Load environment variables from .env file automatically
@@ -39,9 +38,9 @@ OWNER_EMAIL = os.environ.get("OWNER_EMAIL", SENDER_EMAIL)
 # Set DEMO_OTP_ENABLED=true only for local/testing environments. Keep false in production.
 DEMO_OTP_ENABLED = os.environ.get("DEMO_OTP_ENABLED", "false").strip().lower() == "true"
 
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", "YOUR_TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", "YOUR_TWILIO_AUTH_TOKEN")
-TWILIO_WHATSAPP_NUMBER = os.environ.get("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
+# --- META WHATSAPP CLOUD API CREDENTIALS ---
+META_WHATSAPP_TOKEN = os.environ.get("META_WHATSAPP_TOKEN", "").strip()
+META_PHONE_NUMBER_ID = os.environ.get("META_PHONE_NUMBER_ID", "").strip()
 OWNER_WHATSAPP_NUMBER = os.environ.get("OWNER_WHATSAPP_NUMBER", "")
 
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
@@ -87,26 +86,56 @@ def format_whatsapp_phone(phone_str):
     clean_phone = sanitize_phone(phone_str)
     return f"+91{clean_phone}" if len(clean_phone) == 10 else f"+{clean_phone}"
 
-def is_twilio_configured():
-    return all([
-        TWILIO_ACCOUNT_SID and TWILIO_ACCOUNT_SID != "YOUR_TWILIO_ACCOUNT_SID",
-        TWILIO_AUTH_TOKEN and TWILIO_AUTH_TOKEN != "YOUR_TWILIO_AUTH_TOKEN",
-        TWILIO_WHATSAPP_NUMBER,
-    ])
+def is_meta_configured():
+    return bool(META_WHATSAPP_TOKEN and META_PHONE_NUMBER_ID)
 
-def send_whatsapp(to_phone, body):
-    if not to_phone or not is_twilio_configured():
+def send_whatsapp_meta(to_phone, body, image_url=None):
+    """
+    Sends a WhatsApp message using Meta's Official Cloud API.
+    Requires META_WHATSAPP_TOKEN and META_PHONE_NUMBER_ID in environment.
+    """
+    if not to_phone or not is_meta_configured():
         return False
+    
     try:
-        Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN).messages.create(
-            from_=TWILIO_WHATSAPP_NUMBER,
-            to=f"whatsapp:{format_whatsapp_phone(to_phone)}" if not str(to_phone).startswith("whatsapp:") else to_phone,
-            body=body,
+        formatted_phone = format_whatsapp_phone(to_phone).replace("+", "")
+        url = f"https://graph.facebook.com/v19.0/{META_PHONE_NUMBER_ID}/messages"
+        
+        headers = {
+            "Authorization": f"Bearer {META_WHATSAPP_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        # Note: For real broadcasts, you MUST use a "template" payload if the user
+        # hasn't messaged you in the last 24 hours. This is Meta's policy.
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": formatted_phone,
+            "type": "text",
+            "text": {"body": body}
+        }
+
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers=headers,
+            method="POST"
         )
-        return True
+
+        with urllib.request.urlopen(req, timeout=20) as response:
+            response_body = response.read().decode("utf-8", errors="replace")
+            if response.status in (200, 201):
+                print(f"WhatsApp successfully sent to {to_phone} via Meta API.")
+                return True
+            print(f"Meta API returned status {response.status}: {response_body}")
+
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8", errors="replace")
+        print(f"Meta API HTTP Error {e.code}: {error_body}")
     except Exception as e:
-        print(f"Error sending WhatsApp message: {e}")
-        return False
+        print(f"Meta WhatsApp error: {type(e).__name__}: {e}")
+    
+    return False
 
 def publish_web_notification(title, message, kind="info"):
     notification = {
@@ -129,19 +158,13 @@ def publish_web_notification(title, message, kind="info"):
 def send_email_via_http(to_email, subject, html_body):
     """
     Send email using Brevo's HTTP API first.
-
-    IMPORTANT:
-    Render Free web services block outbound SMTP ports 25/465/587.
-    Brevo's HTTPS API uses port 443, so it works without SMTP access.
+    Render Free web services block outbound SMTP ports. Brevo's HTTPS API uses port 443.
     Gmail SMTP remains as a secondary fallback for paid/non-blocked hosting.
     """
     to_email = str(to_email or "").strip()
     sender_email = os.environ.get("SENDER_EMAIL", "").strip()
     brevo_api_key = os.environ.get("BREVO_API_KEY", "").strip()
-    brevo_sender_name = os.environ.get(
-        "BREVO_SENDER_NAME",
-        "Sanjivani Dairy Farm"
-    ).strip()
+    brevo_sender_name = os.environ.get("BREVO_SENDER_NAME", "Sanjivani Dairy Farm").strip()
 
     if not to_email:
         print("Email error: recipient email is empty.")
@@ -151,33 +174,20 @@ def send_email_via_http(to_email, subject, html_body):
         print(f"Email error: invalid recipient email: {to_email}")
         return False
 
-    # ---------------------------------------------------------
     # 1. PRIMARY: BREVO HTTPS API
-    # ---------------------------------------------------------
-    # This is the recommended method for a Render Free web service.
     if brevo_api_key and sender_email:
         url = "https://api.brevo.com/v3/smtp/email"
-
         payload = {
-            "sender": {
-                "name": brevo_sender_name,
-                "email": sender_email
-            },
-            "to": [
-                {
-                    "email": to_email
-                }
-            ],
+            "sender": {"name": brevo_sender_name, "email": sender_email},
+            "to": [{"email": to_email}],
             "subject": subject,
             "htmlContent": html_body
         }
-
         headers = {
             "accept": "application/json",
             "api-key": brevo_api_key,
             "content-type": "application/json"
         }
-
         try:
             req = urllib.request.Request(
                 url,
@@ -185,41 +195,15 @@ def send_email_via_http(to_email, subject, html_body):
                 headers=headers,
                 method="POST"
             )
-
             with urllib.request.urlopen(req, timeout=20) as response:
-                response_body = response.read().decode("utf-8", errors="replace")
-
                 if response.status in (200, 201, 202):
                     print(f"Email successfully sent to {to_email} via Brevo HTTP API.")
                     return True
-
-                print(
-                    f"Brevo returned unexpected HTTP status "
-                    f"{response.status}: {response_body}"
-                )
-
-        except urllib.error.HTTPError as e:
-            error_body = e.read().decode("utf-8", errors="replace")
-            print(f"Brevo HTTP Error {e.code}: {error_body}")
-
-        except urllib.error.URLError as e:
-            print(f"Brevo connection error: {e}")
-
         except Exception as e:
             print(f"Brevo email error: {type(e).__name__}: {e}")
 
-    elif not brevo_api_key:
-        print("Brevo email is not configured: BREVO_API_KEY is missing.")
-    elif not sender_email:
-        print("Brevo email is not configured: SENDER_EMAIL is missing.")
-
-    # ---------------------------------------------------------
     # 2. SECONDARY: GMAIL SMTP
-    # ---------------------------------------------------------
-    # Keep this fallback for paid Render/non-Render environments.
-    # Render Free blocks SMTP ports, so this is normally skipped/fails there.
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
-
     if sender_email and gmail_app_password:
         try:
             msg = MIMEMultipart("alternative")
@@ -227,23 +211,13 @@ def send_email_via_http(to_email, subject, html_body):
             msg["From"] = f"Sanjivani Dairy Farm <{sender_email}>"
             msg["To"] = to_email
             msg.attach(MIMEText(html_body, "html", "utf-8"))
-
             with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
                 server.login(sender_email, gmail_app_password)
-                server.sendmail(
-                    sender_email,
-                    to_email,
-                    msg.as_string()
-                )
-
+                server.sendmail(sender_email, to_email, msg.as_string())
             print(f"Email successfully sent to {to_email} via Gmail SMTP.")
             return True
-
         except Exception as e:
             print(f"Gmail SMTP Error: {type(e).__name__}: {e}")
-
-    elif not gmail_app_password:
-        print("Gmail SMTP is not configured: GMAIL_APP_PASSWORD is missing.")
 
     print("ERROR: No configured email provider successfully sent the email.")
     return False
@@ -254,14 +228,9 @@ def is_email(value):
 
 @app.route('/api/email-status', methods=['GET'])
 def email_status():
-    """
-    Safe email configuration diagnostic.
-    Never returns API keys or passwords.
-    """
     sender_email = os.environ.get("SENDER_EMAIL", "").strip()
     brevo_api_key = os.environ.get("BREVO_API_KEY", "").strip()
     gmail_app_password = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
-
     return jsonify({
         "success": True,
         "brevo_configured": bool(brevo_api_key and sender_email),
@@ -286,7 +255,6 @@ def get_recent_notifications():
 @app.route('/api/notifications/stream', methods=['GET'])
 def stream_notifications():
     subscriber = queue.Queue(maxsize=25)
-
     def event_stream():
         with notification_lock:
             notification_subscribers.append(subscriber)
@@ -302,7 +270,6 @@ def stream_notifications():
             with notification_lock:
                 if subscriber in notification_subscribers:
                     notification_subscribers.remove(subscriber)
-
     return Response(stream_with_context(event_stream()), mimetype='text/event-stream', headers={
         'Cache-Control': 'no-cache',
         'X-Accel-Buffering': 'no',
@@ -322,7 +289,6 @@ def register():
         return jsonify({"success": False, "message": "Phone number and password are required."}), 400
 
     clean_phone = sanitize_phone(phone)
-
     if clean_phone in users_db:
         return jsonify({"success": False, "message": "Phone number already registered. Please sign in."}), 400
 
@@ -333,7 +299,6 @@ def register():
         "password_hash": generate_password_hash(password)
     }
     save_json_file(USERS_FILE, users_db)
-
     return jsonify({"success": True, "message": "Account created successfully!"}), 201
 
 
@@ -349,7 +314,6 @@ def send_email_otp():
         return jsonify({"success": False, "message": "Email is required."}), 400
 
     clean_phone = sanitize_phone(phone)
-
     if clean_phone:
         if clean_phone in users_db:
             users_db[clean_phone]['email'] = email
@@ -376,30 +340,15 @@ def send_email_otp():
     """
 
     if send_email_via_http(email, "Your Sanjivani Farm Verification Code", html_content):
-        response = {
-            "success": True,
-            "message": f"OTP sent to {email}"
-        }
-
-        # Never expose a real OTP to the browser.
-        # This is only available when explicitly enabled for testing.
+        response = {"success": True, "message": f"OTP sent to {email}"}
         if DEMO_OTP_ENABLED:
             response["test_otp"] = otp
-
         return jsonify(response), 200
 
-    # Do not silently authenticate users with a hard-coded OTP in production.
     if DEMO_OTP_ENABLED:
-        return jsonify({
-            "success": False,
-            "test_otp": "123456",
-            "message": "Email delivery failed. Demo OTP is enabled for testing only."
-        }), 500
+        return jsonify({"success": False, "test_otp": "123456", "message": "Email delivery failed. Demo OTP enabled."}), 500
 
-    return jsonify({
-        "success": False,
-        "message": "We could not send the verification email. Please try again later."
-    }), 502
+    return jsonify({"success": False, "message": "We could not send the verification email. Please try again later."}), 502
 
 
 # --- 3. OTP VERIFICATION ENDPOINT ---
@@ -413,7 +362,6 @@ def verify_otp():
         return jsonify({"success": False, "message": "Identifier and OTP are required."}), 400
 
     expected_otp = otp_store.get(identifier)
-
     if otp_provided == "123456" or (expected_otp and otp_provided == expected_otp):
         otp_store.pop(identifier, None)
         return jsonify({"success": True, "message": "OTP verification successful!"}), 200
@@ -427,7 +375,6 @@ def generate_whatsapp_otp():
     data = request.json or {}
     phone = data.get('phone', '').strip()
     name = data.get('name', 'Customer').strip()
-
     clean_phone = sanitize_phone(phone)
 
     if clean_phone and clean_phone not in users_db:
@@ -441,7 +388,6 @@ def generate_whatsapp_otp():
 
     otp = str(random.randint(100000, 999999))
     otp_store[clean_phone] = otp
-
     business_number = "918943584058"
     message_text = f"My Sanjivani Farm OTP is {otp}"
     whatsapp_url = f"https://wa.me/{business_number}?text={quote(message_text)}"
@@ -481,7 +427,6 @@ def phone_password_login():
 @app.route('/api/admin/login', methods=['POST'])
 def admin_login():
     data = request.json or {}
-
     username = (data.get('username') or data.get('staff_username') or data.get('staffUsername') or '').strip().lower()
     password = (data.get('password') or data.get('staff_password') or data.get('staffPassword') or '').strip()
 
@@ -492,10 +437,7 @@ def admin_login():
         return jsonify({
             "success": True,
             "message": "Staff authentication successful!",
-            "admin": {
-                "username": username,
-                "role": "admin"
-            }
+            "admin": {"username": username, "role": "admin"}
         }), 200
 
     return jsonify({"success": False, "message": "Invalid Staff Username or Password."}), 401
@@ -506,12 +448,11 @@ def admin_login():
 def sync_users():
     data = request.json or {}
     users_list = data.get('users', [])
-
     added_count = 0
+
     for u in users_list:
         phone = u.get('phone') or u.get('contact')
         clean_phone = sanitize_phone(phone)
-
         if clean_phone and clean_phone not in users_db:
             users_db[clean_phone] = {
                 "full_name": u.get('name', 'Customer'),
@@ -531,7 +472,24 @@ def sync_users():
     }), 200
 
 
-# --- 8. ADMIN BROADCAST WHATSAPP OFFERS ---
+# --- 8. GET REGISTERED CUSTOMERS FOR ADMIN DASHBOARD ---
+@app.route('/api/admin/users', methods=['GET'])
+def get_admin_users():
+    try:
+        users = []
+        for phone_key, user in users_db.items():
+            users.append({
+                "name": user.get("full_name") or user.get("name") or "Customer",
+                "email": user.get("email") or "",
+                "phone": user.get("phone") or phone_key
+            })
+        return jsonify({"success": True, "users": users, "count": len(users)}), 200
+    except Exception as e:
+        print(f"Admin users error: {e}")
+        return jsonify({"success": False, "message": "Failed to load registered customers.", "users": []}), 500
+
+
+# --- 9. ADMIN BROADCAST WHATSAPP OFFERS ---
 @app.route('/api/admin/broadcast-offer', methods=['POST'])
 def broadcast_offer():
     try:
@@ -545,7 +503,6 @@ def broadcast_offer():
         else:
             offer_text = request.form.get('offer_text') or request.form.get('message', '')
             image_file = request.files.get('image') or request.files.get('file')
-
             if image_file:
                 filename = secure_filename(image_file.filename)
                 file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -553,41 +510,37 @@ def broadcast_offer():
                 image_url = f"{request.host_url.rstrip('/')}/static/uploads/offers/{filename}"
 
         if not users_db:
-            return jsonify({
-                "success": False,
-                "message": "No registered users found in server database to broadcast to."
-            }), 400
+            return jsonify({"success": False, "message": "No registered users found in server database to broadcast to."}), 400
 
-        sent_count = 0
-        failed_count = 0
+        whatsapp_sent_count = 0
+        whatsapp_failed_count = 0
+        email_sent_count = 0
 
         for phone_key, user in users_db.items():
             user_phone = user.get('phone', phone_key)
-            if not user_phone:
-                continue
-
             message = offer_text if offer_text else "🎁 New Exclusive Offer from Sanjivani Farm!"
-            try:
-                if not is_twilio_configured():
-                    raise RuntimeError("WhatsApp is not configured")
-                payload = {'from_': TWILIO_WHATSAPP_NUMBER, 'to': f"whatsapp:{format_whatsapp_phone(user_phone)}", 'body': message}
-                if image_url:
-                    payload['media_url'] = [image_url]
-                Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN).messages.create(**payload)
-                sent_count += 1
-            except Exception as e:
-                print(f"Failed to send WhatsApp message to {user_phone}: {e}")
-                failed_count += 1
+            
+            # Attempt WhatsApp via Meta (will fail gracefully if not configured)
+            if user_phone:
+                whatsapp_success = send_whatsapp_meta(user_phone, message, image_url)
+                if whatsapp_success:
+                    whatsapp_sent_count += 1
+                else:
+                    whatsapp_failed_count += 1
 
+            # Attempt Email via Brevo
             if user.get('email'):
-                send_email_via_http(user['email'], "New offer from Sanjivani Dairy Farm", f"<p>{message}</p>")
+                if send_email_via_http(user['email'], "New offer from Sanjivani Dairy Farm", f"<p>{message}</p>"):
+                    email_sent_count += 1
 
         publish_web_notification("New offer", offer_text or "🎁 New Exclusive Offer from Sanjivani Farm!", "offer")
 
         return jsonify({
             "success": True,
-            "message": f"Broadcast complete. Sent to {sent_count} user(s).",
-            "failed_count": failed_count
+            "message": f"Broadcast complete. Emails sent to {email_sent_count} user(s).",
+            "sent_count": whatsapp_sent_count,
+            "failed_count": whatsapp_failed_count,
+            "email_sent_count": email_sent_count
         }), 200
 
     except Exception as e:
@@ -595,37 +548,28 @@ def broadcast_offer():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-# --- 9. RAZORPAY PAYMENT INITIATION ---
+# --- 10. RAZORPAY PAYMENT INITIATION ---
 @app.route('/api/create-razorpay-order', methods=['POST'])
 def create_razorpay_order():
     try:
         if not razorpay_client:
-            return jsonify({"success": False, "error": "Online payments are not configured. Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET."}), 503
+            return jsonify({"success": False, "error": "Online payments are not configured."}), 503
         data = request.json or {}
         amount_in_rupees = float(data.get('amount', 195))
         if amount_in_rupees <= 0:
             return jsonify({"success": False, "error": "A positive payment amount is required."}), 400
         amount_in_paise = int(amount_in_rupees * 100)
 
-        order_params = {
-            "amount": amount_in_paise,
-            "currency": "INR",
-            "payment_capture": "1"
-        }
-
+        order_params = {"amount": amount_in_paise, "currency": "INR", "payment_capture": "1"}
         order = razorpay_client.order.create(data=order_params)
 
-        return jsonify({
-            "success": True,
-            "order": order,
-            "key_id": RAZORPAY_KEY_ID
-        }), 200
+        return jsonify({"success": True, "order": order, "key_id": RAZORPAY_KEY_ID}), 200
     except Exception as e:
         print(f"Razorpay Order Error: {e}")
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-# --- 10. RAZORPAY PAYMENT VERIFICATION & EMAIL NOTIFICATIONS ---
+# --- 11. RAZORPAY PAYMENT VERIFICATION & EMAIL NOTIFICATIONS ---
 @app.route('/api/verify-payment', methods=['POST'])
 def verify_payment():
     try:
@@ -642,7 +586,6 @@ def verify_payment():
         user_phone = sanitize_phone(data.get('userPhone'))
         total_amount = data.get('totalAmount', 'N/A')
 
-        # Verify signature
         params_dict = {
             'razorpay_order_id': razorpay_order_id,
             'razorpay_payment_id': razorpay_payment_id,
@@ -650,7 +593,6 @@ def verify_payment():
         }
         razorpay_client.utility.verify_payment_signature(params_dict)
 
-        # Save order to permanent orders list
         new_order = {
             "order_id": razorpay_order_id,
             "payment_id": razorpay_payment_id,
@@ -665,14 +607,12 @@ def verify_payment():
         orders_db.append(new_order)
         save_json_file(ORDERS_FILE, orders_db)
 
-        # Format address & cart for emails
         formatted_address = address
         if isinstance(address, dict):
             formatted_address = f"{address.get('fullName', '')}, {address.get('phone', '')}, {address.get('addressLine', '')}, {address.get('city', '')}, {address.get('state', '')} - {address.get('pincode', '')}"
 
         cart_items_html = "".join([f"<li>{item.get('name', 'Product')} (Qty: {item.get('quantity', 1)}) - ₹{item.get('price', 0) * item.get('quantity', 1)}</li>" for item in cart])
 
-        # 1. Customer Email
         if user_email:
             customer_html = f"""
             <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #16a34a; border-radius: 10px; max-width: 600px;">
@@ -689,7 +629,6 @@ def verify_payment():
             """
             send_email_via_http(user_email, "Order Confirmation - Sanjivani Dairy Farm", customer_html)
 
-        # 2. Owner Email
         owner_html = f"""
         <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #2563eb; border-radius: 10px; max-width: 600px;">
             <h2 style="color: #2563eb;">🚨 New Online Order Received!</h2>
@@ -705,8 +644,8 @@ def verify_payment():
         send_email_via_http(OWNER_EMAIL, f"New online order from {user_email or user_phone} (Rs. {total_amount})", owner_html)
 
         customer_message = f"Sanjivani order confirmed. Payment received: Rs. {total_amount}. Order ID: {razorpay_order_id}."
-        send_whatsapp(user_phone, customer_message)
-        send_whatsapp(OWNER_WHATSAPP_NUMBER, f"New paid order {razorpay_order_id}: Rs. {total_amount} from {user_email or user_phone}.")
+        send_whatsapp_meta(user_phone, customer_message)
+        send_whatsapp_meta(OWNER_WHATSAPP_NUMBER, f"New paid order {razorpay_order_id}: Rs. {total_amount} from {user_email or user_phone}.")
         publish_web_notification("Order confirmed", f"Your payment of ₹{total_amount} was successful. Order {razorpay_order_id} is confirmed.", "order")
 
         return jsonify({"success": True, "message": "Payment verified and order notifications queued.", "order": new_order}), 200
@@ -716,7 +655,7 @@ def verify_payment():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-# --- 11. CASH ON DELIVERY (COD) ORDER & EMAIL NOTIFICATIONS ---
+# --- 12. CASH ON DELIVERY (COD) ORDER & EMAIL NOTIFICATIONS ---
 @app.route('/api/place-order-cod', methods=['POST'])
 def place_order_cod():
     try:
@@ -729,7 +668,6 @@ def place_order_cod():
 
         order_id = f"COD-{random.randint(100000, 999999)}"
 
-        # Save COD order to permanent storage
         new_order = {
             "order_id": order_id,
             "payment_method": "Cash on Delivery",
@@ -743,14 +681,12 @@ def place_order_cod():
         orders_db.append(new_order)
         save_json_file(ORDERS_FILE, orders_db)
 
-        # Format details
         formatted_address = address
         if isinstance(address, dict):
             formatted_address = f"{address.get('fullName', '')}, {address.get('phone', '')}, {address.get('addressLine', '')}, {address.get('city', '')}, {address.get('state', '')} - {address.get('pincode', '')}"
 
         cart_items_html = "".join([f"<li>{item.get('name', 'Product')} (Qty: {item.get('quantity', 1)}) - ₹{item.get('price', 0) * item.get('quantity', 1)}</li>" for item in cart])
 
-        # 1. Customer Email
         if user_email:
             customer_html = f"""
             <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #16a34a; border-radius: 10px; max-width: 600px;">
@@ -767,7 +703,6 @@ def place_order_cod():
             """
             send_email_via_http(user_email, "COD Order Confirmation - Sanjivani Dairy Farm", customer_html)
 
-        # 2. Owner Email
         owner_html = f"""
         <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #f97316; border-radius: 10px; max-width: 600px;">
             <h2 style="color: #f97316;">🚨 New Cash on Delivery Order!</h2>
@@ -781,8 +716,8 @@ def place_order_cod():
         </div>
         """
         send_email_via_http(OWNER_EMAIL, f"New COD order (Rs. {total_amount})", owner_html)
-        send_whatsapp(user_phone, f"Sanjivani order received. Pay ₹{total_amount} on delivery. Order ID: {order_id}.")
-        send_whatsapp(OWNER_WHATSAPP_NUMBER, f"New COD order {order_id}: Rs. {total_amount} from {user_email or user_phone}.")
+        send_whatsapp_meta(user_phone, f"Sanjivani order received. Pay ₹{total_amount} on delivery. Order ID: {order_id}.")
+        send_whatsapp_meta(OWNER_WHATSAPP_NUMBER, f"New COD order {order_id}: Rs. {total_amount} from {user_email or user_phone}.")
         publish_web_notification("Order placed", f"Your COD order {order_id} is confirmed. Please keep ₹{total_amount} ready for delivery.", "order")
 
         return jsonify({"success": True, "order_id": order_id, "message": "COD order placed and notifications queued.", "order": new_order}), 200
@@ -792,7 +727,7 @@ def place_order_cod():
         return jsonify({"success": False, "message": str(e)}), 500
 
 
-# --- 12. GET ORDERS FOR ADMIN / CUSTOMER ---
+# --- 13. GET ORDERS FOR ADMIN / CUSTOMER ---
 @app.route('/api/admin/orders', methods=['GET'])
 def get_admin_orders():
     return jsonify({"success": True, "orders": orders_db}), 200
@@ -809,7 +744,6 @@ def get_user_orders():
     if not identifier:
         return jsonify({'success': True, 'orders': orders_db}), 200
 
-    # Filter orders matching stored attributes or nested address fields securely
     filtered_orders = []
     for order in orders_db:
         user_email = str(order.get('user_email', '')).lower()
